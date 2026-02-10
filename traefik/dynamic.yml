@@ -1,0 +1,38 @@
+http:
+  middlewares:
+    # Basic auth middleware for Traefik dashboard (optional)
+    auth-api:
+      basicAuth:
+        users:
+          # Default user: admin / changeme
+          # Generate with: echo $(htpasswd -nB admin) | sed -e s/\\$/\\$\\$/g
+          - "admin:$$2y$$05$$L3K3qvqQZ0Jh9Z0Z0Z0Z0Ou.0Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0"
+
+    # Security headers
+    security-headers:
+      headers:
+        frameDeny: true
+        sslRedirect: true
+        browserXssFilter: true
+        contentTypeNosniff: true
+        forceSTSHeader: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        customFrameOptionsValue: "SAMEORIGIN"
+
+    # Rate limiting
+    rate-limit:
+      rateLimit:
+        average: 100
+        period: 1s
+        burst: 50
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305

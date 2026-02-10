@@ -1,0 +1,191 @@
+version: '3.8'
+
+networks:
+  ansible:
+    driver: bridge
+    name: ansible
+
+services:
+  # Traefik - Reverse Proxy
+  traefik:
+    image: traefik:v3.0
+    container_name: ansible-traefik
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - ansible
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/dynamic.yml:/dynamic.yml:ro
+      - ./traefik/acme.json:/acme.json
+      - ./traefik/logs:/logs
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.mon_url.com`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=auth-api@file"
+
+  # Voight-Kampff - API Key Authentication Service
+  voight-kampff:
+    build: ./voight-kampff
+    container_name: ansible-voight-kampff
+    restart: unless-stopped
+    networks:
+      - ansible
+    environment:
+      - TZ=Europe/Paris
+      - VK_DB_PATH=/data/voight-kampff.db
+      - VK_SECRET_KEY=${VK_SECRET_KEY:-change-this-secret-key-for-production}
+    volumes:
+      - ./voight-kampff/data:/data
+      - ./voight-kampff/config:/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.vk.rule=Host(`auth.mon_url.com`)"
+      - "traefik.http.routers.vk.entrypoints=websecure"
+      - "traefik.http.routers.vk.tls.certresolver=letsencrypt"
+      - "traefik.http.services.vk.loadbalancer.server.port=8080"
+
+  # Immich - Photo Management (with its own auth)
+  immich:
+    image: ghcr.io/immich-app/immich-server:release
+    container_name: ansible-immich
+    restart: unless-stopped
+    networks:
+      - ansible
+    volumes:
+      - ./immich/upload:/usr/src/app/upload
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      DB_HOSTNAME: immich-postgres
+      DB_USERNAME: immich
+      DB_PASSWORD: ${IMMICH_DB_PASSWORD:-changeme}
+      DB_DATABASE_NAME: immich
+      REDIS_HOSTNAME: immich-redis
+      TZ: Europe/Paris
+    depends_on:
+      - immich-postgres
+      - immich-redis
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.immich.rule=Host(`photos.mon_url.com`)"
+      - "traefik.http.routers.immich.entrypoints=websecure"
+      - "traefik.http.routers.immich.tls.certresolver=letsencrypt"
+      - "traefik.http.services.immich.loadbalancer.server.port=3001"
+
+  immich-postgres:
+    image: tensorchord/pgvecto-rs:pg16-v0.2.0
+    container_name: ansible-immich-postgres
+    restart: unless-stopped
+    networks:
+      - ansible
+    environment:
+      POSTGRES_USER: immich
+      POSTGRES_PASSWORD: ${IMMICH_DB_PASSWORD:-changeme}
+      POSTGRES_DB: immich
+    volumes:
+      - ./immich/postgres:/var/lib/postgresql/data
+
+  immich-redis:
+    image: redis:alpine
+    container_name: ansible-immich-redis
+    restart: unless-stopped
+    networks:
+      - ansible
+
+  # TTS Service - Text-to-Speech (protected by API key)
+  tts-service:
+    image: your-tts-image:latest
+    container_name: ansible-tts
+    restart: unless-stopped
+    networks:
+      - ansible
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - ./services/tts:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tts.rule=Host(`tts.mon_url.com`)"
+      - "traefik.http.routers.tts.entrypoints=websecure"
+      - "traefik.http.routers.tts.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.tts.middlewares=vk-tts@docker"
+      - "traefik.http.middlewares.vk-tts.forwardauth.address=http://voight-kampff:8080/verify"
+      - "traefik.http.middlewares.vk-tts.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.vk-tts.forwardauth.authResponseHeaders=X-VK-User,X-VK-Service,X-VK-Scopes"
+      - "traefik.http.services.tts.loadbalancer.server.port=8000"
+
+  # STT Service - Speech-to-Text (protected by API key)
+  stt-service:
+    image: your-stt-image:latest
+    container_name: ansible-stt
+    restart: unless-stopped
+    networks:
+      - ansible
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - ./services/stt:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.stt.rule=Host(`stt.mon_url.com`)"
+      - "traefik.http.routers.stt.entrypoints=websecure"
+      - "traefik.http.routers.stt.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.stt.middlewares=vk-stt@docker"
+      - "traefik.http.middlewares.vk-stt.forwardauth.address=http://voight-kampff:8080/verify"
+      - "traefik.http.middlewares.vk-stt.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.vk-stt.forwardauth.authResponseHeaders=X-VK-User,X-VK-Service,X-VK-Scopes"
+      - "traefik.http.services.stt.loadbalancer.server.port=8000"
+
+  # LLM Service - Language Model (protected by API key)
+  llm-service:
+    image: your-llm-image:latest
+    container_name: ansible-llm
+    restart: unless-stopped
+    networks:
+      - ansible
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - ./services/llm:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.llm.rule=Host(`llm.mon_url.com`)"
+      - "traefik.http.routers.llm.entrypoints=websecure"
+      - "traefik.http.routers.llm.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.llm.middlewares=vk-llm@docker"
+      - "traefik.http.middlewares.vk-llm.forwardauth.address=http://voight-kampff:8080/verify"
+      - "traefik.http.middlewares.vk-llm.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.vk-llm.forwardauth.authResponseHeaders=X-VK-User,X-VK-Service,X-VK-Scopes"
+      - "traefik.http.services.llm.loadbalancer.server.port=8000"
+
+  # Assistant Backend (protected by API key)
+  assistant-backend:
+    image: your-assistant-image:latest
+    container_name: ansible-assistant
+    restart: unless-stopped
+    networks:
+      - ansible
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - ./services/assistant:/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.assistant.rule=Host(`assistant.mon_url.com`)"
+      - "traefik.http.routers.assistant.entrypoints=websecure"
+      - "traefik.http.routers.assistant.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.assistant.middlewares=vk-assistant@docker"
+      - "traefik.http.middlewares.vk-assistant.forwardauth.address=http://voight-kampff:8080/verify"
+      - "traefik.http.middlewares.vk-assistant.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.vk-assistant.forwardauth.authResponseHeaders=X-VK-User,X-VK-Service,X-VK-Scopes"
+      - "traefik.http.services.assistant.loadbalancer.server.port=8000"

@@ -1,0 +1,26 @@
+# Environment variables
+.env
+
+# Traefik data
+traefik/acme.json
+traefik/logs/
+
+# Voight-Kampff data
+voight-kampff/data/
+
+# Services data
+services/*/
+
+# Immich data
+immich/upload/
+immich/postgres/
+
+# Temporary files
+*.log
+*.tmp
+*.backup
+*.bak
+
+# OS files
+.DS_Store
+Thumbs.db
