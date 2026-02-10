@@ -6,7 +6,7 @@ http:
         users:
           # Default user: admin / changeme
           # Generate with: echo $(htpasswd -nB admin) | sed -e s/\\$/\\$\\$/g
-          - "admin:$$2y$$05$$L3K3qvqQZ0Jh9Z0Z0Z0Z0Ou.0Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0Z0"
+          - "admin:$$2y$$05$$FsYKRG9Zt02bBBww/R38eevV8K4aBdxVrYHgQxXnBVAcFf0dL71u."
 
     # Security headers
     security-headers:
@@ -27,6 +27,23 @@ http:
         average: 100
         period: 1s
         burst: 50
+
+  routers:
+    # Immich - Photo Management
+    immich:
+      rule: "Host(`photos.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: immich-service
+
+  services:
+    # Immich Service
+    immich-service:
+      loadBalancer:
+        servers:
+          - url: "http://immich_server:2283"
 
 tls:
   options:
