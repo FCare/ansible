@@ -56,6 +56,15 @@ http:
         certResolver: letsencrypt
       service: chatterbox-service
 
+    # vLLM FastAPI - The Brain
+    thebrain:
+      rule: "Host(`thebrain.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: vllm-service
+
     # Immich - Photo Management
     immich:
       rule: "Host(`photos.caronboulme.fr`)"
@@ -82,6 +91,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://chatterbox-tts-api-blackwell:4123"
+
+    # vLLM FastAPI Service
+    vllm-service:
+      loadBalancer:
+        servers:
+          - url: "http://qwen-api-server:8000"
 
     # Immich Service
     immich-service:
