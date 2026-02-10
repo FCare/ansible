@@ -47,6 +47,15 @@ http:
         certResolver: letsencrypt
       service: stt-service
 
+    # Chatterbox TTS Service
+    chatterbox:
+      rule: "Host(`chatterbox.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: chatterbox-service
+
     # Immich - Photo Management
     immich:
       rule: "Host(`photos.caronboulme.fr`)"
@@ -67,6 +76,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://stt:8080"
+
+    # Chatterbox Service
+    chatterbox-service:
+      loadBalancer:
+        servers:
+          - url: "http://chatterbox-tts-api-blackwell:4123"
 
     # Immich Service
     immich-service:
