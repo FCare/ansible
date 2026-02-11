@@ -922,12 +922,16 @@ async def check_authentication(
                 user_name = user.username
                 
                 # For session cookies, verify USER scopes (admin-controlled permissions)
-                user_allowed_scopes = [s.strip() for s in user.allowed_scopes.split(',') if s.strip()]
+                if user.allowed_scopes is None or user.allowed_scopes.strip() == "":
+                    # No scopes defined, deny access (except auth service)
+                    user_allowed_scopes = []
+                else:
+                    user_allowed_scopes = [s.strip() for s in user.allowed_scopes.split(',') if s.strip()]
                 
                 # Special case: always allow access to auth service for session management
                 if service == "auth":
                     api_key = f"session_{user_id}_{service}"
-                elif '*' in user_allowed_scopes or service in user_allowed_scopes:
+                elif user.allowed_scopes == "*" or '*' in user_allowed_scopes or service in user_allowed_scopes:
                     # User has permission for this service
                     api_key = f"session_{user_id}_{service}"
                 else:
@@ -1033,13 +1037,16 @@ async def verify_api_key(
             )
     
     # Return success with custom headers
+    # Handle session cookies where db_key is None
+    scopes = db_key.scopes if db_key else "session"
+    
     return JSONResponse(
         status_code=200,
         content={"valid": True, "user": user_name, "service": service},
         headers={
             "X-VK-User": user_name,
             "X-VK-Service": service,
-            "X-VK-Scopes": db_key.scopes
+            "X-VK-Scopes": scopes
         }
     )
 
