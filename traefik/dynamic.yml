@@ -108,6 +108,15 @@ http:
       middlewares:
         - vk-hybrid
 
+    # Photos Service - Immich (no auth middleware needed, has its own auth)
+    photos:
+      rule: "Host(`photos.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: photos-service
+
   services:
     # Auth Service - Voight-Kampff Web Interface
     auth-service:
@@ -143,3 +152,9 @@ http:
       loadBalancer:
         servers:
           - url: "http://chatterbox-tts-api-blackwell:4123"
+
+    # Photos Service - Immich Server
+    photos-service:
+      loadBalancer:
+        servers:
+          - url: "http://immich_server:2283"
