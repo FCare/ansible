@@ -7,7 +7,7 @@ networks:
 
 services:
   # Traefik - Reverse Proxy
-  traefik:
+  joshua:
     image: traefik:v3.0
     container_name: ansible-traefik
     restart: unless-stopped
