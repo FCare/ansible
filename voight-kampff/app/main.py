@@ -928,7 +928,7 @@ async def check_authentication(
             
             if user:
                 user_name = user.username
-                print(f"🔍 AUTH DEBUG - User found: {user_name}, allowed_scopes: {user.allowed_scopes}")
+                print(f"🔍 AUTH DEBUG - User found: {user_name}, allowed_scopes: {user.allowed_scopes}, is_admin: {user.is_admin}")
                 
                 # For session cookies, verify USER scopes (admin-controlled permissions)
                 if user.allowed_scopes is None or user.allowed_scopes.strip() == "":
@@ -938,6 +938,11 @@ async def check_authentication(
                 else:
                     user_allowed_scopes = [s.strip() for s in user.allowed_scopes.split(',') if s.strip()]
                     print(f"🔍 AUTH DEBUG - User allowed scopes: {user_allowed_scopes}")
+                
+                # Admin users automatically get traefik access
+                if user.is_admin and 'traefik' not in user_allowed_scopes:
+                    user_allowed_scopes.append('traefik')
+                    print(f"🔍 AUTH DEBUG - Admin user: automatically added traefik access")
                 
                 # Special case: always allow access to auth service for session management
                 if service == "auth":
