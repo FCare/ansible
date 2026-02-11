@@ -571,21 +571,13 @@ async def verify_api_key(
                         api_key = key.api_key
                         break
     
-    # If no authentication method found
+    # If no authentication method found, return 401
+    # Traefik will handle redirect via authRedirect
     if not api_key:
-        # If it's a browser request (has cookie capability), redirect to login
-        if "text/html" in request.headers.get("accept", ""):
-            redirect_url = f"/auth/login?redirect={x_forwarded_uri or request.url}"
-            raise HTTPException(
-                status_code=status.HTTP_302_FOUND,
-                headers={"Location": redirect_url}
-            )
-        else:
-            # For API requests, return 401
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Missing or invalid authentication"
-            )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid authentication"
+        )
     
     # Query database for API key
     result = await session.execute(
