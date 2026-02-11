@@ -1,34 +1,6 @@
 http:
   middlewares:
-    # Basic auth middleware for Traefik dashboard (optional)
-    auth-api:
-      basicAuth:
-        users:
-          # Default user: admin / changeme
-          # Generate with: echo $(htpasswd -nB admin) | sed -e s/\\$/\\$\\$/g
-          - "admin:$$2y$$05$$FsYKRG9Zt02bBBww/R38eevV8K4aBdxVrYHgQxXnBVAcFf0dL71u."
-
-    # Security headers
-    security-headers:
-      headers:
-        frameDeny: true
-        sslRedirect: true
-        browserXssFilter: true
-        contentTypeNosniff: true
-        forceSTSHeader: true
-        stsIncludeSubdomains: true
-        stsPreload: true
-        stsSeconds: 31536000
-        customFrameOptionsValue: "SAMEORIGIN"
-
-    # Rate limiting
-    rate-limit:
-      rateLimit:
-        average: 100
-        period: 1s
-        burst: 50
-
-    # Hybrid Authentication middlewares (API Key + Cookie)
+    # Hybrid Authentication middleware (API Key + Cookie)
     vk-hybrid:
       forwardAuth:
         address: "http://ansible-voight-kampff:8080/verify"
@@ -43,7 +15,7 @@ http:
           - X-VK-Scopes
 
   routers:
-    # Auth Service - Web Interface
+    # Basic router for testing
     auth:
       rule: "Host(`auth.caronboulme.fr`)"
       entryPoints:
@@ -51,6 +23,17 @@ http:
       tls:
         certResolver: letsencrypt
       service: auth-service
+
+    # vLLM FastAPI - The Brain (protected by hybrid auth)
+    thebrain:
+      rule: "Host(`thebrain.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: vllm-service
+      middlewares:
+        - vk-hybrid
 
     # TTS Service - Unmute Talk (protected by hybrid auth)
     unmute-talk:
@@ -85,32 +68,18 @@ http:
       middlewares:
         - vk-hybrid
 
-    # vLLM FastAPI - The Brain (protected by hybrid auth)
-    thebrain:
-      rule: "Host(`thebrain.caronboulme.fr`)"
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-      service: vllm-service
-      middlewares:
-        - vk-hybrid
-
-    # Immich - Photo Management
-    immich:
-      rule: "Host(`photos.caronboulme.fr`)"
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-      service: immich-service
-
   services:
     # Auth Service - Voight-Kampff Web Interface
     auth-service:
       loadBalancer:
         servers:
           - url: "http://ansible-voight-kampff:8080"
+
+    # vLLM FastAPI Service
+    vllm-service:
+      loadBalancer:
+        servers:
+          - url: "http://qwen-api-server:8000"
 
     # Unmute Services
     tts-service:
@@ -128,24 +97,3 @@ http:
       loadBalancer:
         servers:
           - url: "http://chatterbox-tts-api-blackwell:4123"
-
-    # vLLM FastAPI Service
-    vllm-service:
-      loadBalancer:
-        servers:
-          - url: "http://qwen-api-server:8000"
-
-    # Immich Service
-    immich-service:
-      loadBalancer:
-        servers:
-          - url: "http://immich_server:2283"
-
-tls:
-  options:
-    default:
-      minVersion: VersionTLS12
-      cipherSuites:
-        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
