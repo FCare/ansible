@@ -32,7 +32,7 @@ http:
     vk-hybrid:
       forwardAuth:
         address: "http://ansible-voight-kampff:8080/verify"
-        authRedirect: "https://caronboulme.fr/auth/login"
+        authRedirect: "https://auth.caronboulme.fr/auth/login"
         trustForwardHeader: true
         authRequestHeaders:
           - Authorization

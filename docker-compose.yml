@@ -47,10 +47,4 @@ services:
     volumes:
       - ./voight-kampff/data:/data
       - ./voight-kampff/config:/config
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.vk.rule=Host(`caronboulme.fr`)"
-      - "traefik.http.routers.vk.entrypoints=websecure"
-      - "traefik.http.routers.vk.tls.certresolver=letsencrypt"
-      - "traefik.http.services.vk.loadbalancer.server.port=8080"
 
