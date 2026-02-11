@@ -252,6 +252,13 @@
                 });
             }
         }
+        
+        function submitScopeForm(userId) {
+            const form = document.getElementById('scope-form-' + userId);
+            if (form) {
+                form.submit();
+            }
+        }
     </script>
 </head>
 <body>
@@ -448,62 +455,63 @@
                                 <details>
                                     <summary style="cursor: pointer; font-size: 0.9em;">
                                         {% if admin_user.allowed_scopes == "*" %}
-                                            🟢 Tous les services
+                                            Tous les services
                                         {% else %}
-                                            📋 Services: {{ admin_user.allowed_scopes }}
+                                            Services: {{ admin_user.allowed_scopes }}
                                         {% endif %}
                                     </summary>
                                     <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9;">
-                                        <form method="post" action="/auth/admin/set-user-scopes/{{ admin_user.id }}">
+                                        <form id="scope-form-{{ admin_user.id }}" method="post" action="/auth/admin/set-user-scopes/{{ admin_user.id }}">
                                             {% set user_scopes = admin_user.allowed_scopes.split(',') if admin_user.allowed_scopes != "*" else [] %}
                                             {% set all_services = admin_user.allowed_scopes == "*" %}
                                             
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8em;">
-                                                <label style="display: flex; align-items: center; gap: 4px;">
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85em;">
+                                                <label style="display: flex; align-items: center; gap: 8px;">
                                                     <input type="checkbox" name="service" value="*"
                                                            {% if all_services %}checked{% endif %}
-                                                           onchange="toggleAllServices(this, '{{ admin_user.id }}')">
-                                                    <strong>🌟 Tous les services</strong>
+                                                           onchange="toggleAllServices(this, '{{ admin_user.id }}'); submitScopeForm('{{ admin_user.id }}')">
+                                                    <strong>Tous les services</strong>
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 4px;">
+                                                <label style="display: flex; align-items: center; gap: 8px;">
                                                     <input type="checkbox" name="service" value="thebrain"
                                                            {% if "thebrain" in user_scopes or all_services %}checked{% endif %}
-                                                           {% if all_services %}disabled{% endif %}>
-                                                    🧠 TheBrain (LLM)
+                                                           {% if all_services %}disabled{% endif %}
+                                                           onchange="submitScopeForm('{{ admin_user.id }}')">
+                                                    TheBrain
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 4px;">
+                                                <label style="display: flex; align-items: center; gap: 8px;">
                                                     <input type="checkbox" name="service" value="tts"
                                                            {% if "tts" in user_scopes or all_services %}checked{% endif %}
-                                                           {% if all_services %}disabled{% endif %}>
-                                                    🔊 TTS (Synthèse vocale)
+                                                           {% if all_services %}disabled{% endif %}
+                                                           onchange="submitScopeForm('{{ admin_user.id }}')">
+                                                    TTS
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 4px;">
+                                                <label style="display: flex; align-items: center; gap: 8px;">
                                                     <input type="checkbox" name="service" value="stt"
                                                            {% if "stt" in user_scopes or all_services %}checked{% endif %}
-                                                           {% if all_services %}disabled{% endif %}>
-                                                    🎤 STT (Reconnaissance vocale)
+                                                           {% if all_services %}disabled{% endif %}
+                                                           onchange="submitScopeForm('{{ admin_user.id }}')">
+                                                    STT
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 4px;">
+                                                <label style="display: flex; align-items: center; gap: 8px;">
                                                     <input type="checkbox" name="service" value="immich"
                                                            {% if "immich" in user_scopes or all_services %}checked{% endif %}
-                                                           {% if all_services %}disabled{% endif %}>
-                                                    📸 Immich (Photos)
+                                                           {% if all_services %}disabled{% endif %}
+                                                           onchange="submitScopeForm('{{ admin_user.id }}')">
+                                                    Immich
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 4px;">
+                                                <label style="display: flex; align-items: center; gap: 8px;">
                                                     <input type="checkbox" name="service" value="analytics"
                                                            {% if "analytics" in user_scopes or all_services %}checked{% endif %}
-                                                           {% if all_services %}disabled{% endif %}>
-                                                    📊 Analytics
+                                                           {% if all_services %}disabled{% endif %}
+                                                           onchange="submitScopeForm('{{ admin_user.id }}')">
+                                                    Analytics
                                                 </label>
-                                            </div>
-                                            
-                                            <div style="margin-top: 8px; text-align: right;">
-                                                <button type="submit" class="btn btn-small" style="background: #4ecdc4;">💾 Sauvegarder</button>
                                             </div>
                                         </form>
                                     </div>
