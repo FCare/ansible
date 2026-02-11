@@ -1,48 +1,60 @@
-# Option 2 : Garder vos docker-compose séparés
+# Separate Docker Compose Integration Guide
 
-Ce guide détaille comment intégrer vos services existants au réseau Ansible **en gardant vos fichiers docker-compose séparés**.
+This guide details how to integrate your existing services to the Ansible network **while keeping your docker-compose files separate**.
 
-Cette option est idéale si :
-- ✅ Vous avez déjà des docker-compose bien organisés
-- ✅ Vous voulez gérer vos services indépendamment
-- ✅ Vous développez/testez vos services séparément
-- ✅ Vous avez des configurations complexes à préserver
+This approach is ideal if:
+- ✅ You already have well-organized docker-compose files
+- ✅ You want to manage your services independently
+- ✅ You develop/test your services separately
+- ✅ You have complex configurations to preserve
 
-## 📁 Structure de répertoires recommandée
+## 🏗️ Important: Ansible is a Proxy Only
+
+**Key Understanding**: The Ansible project is **only a Traefik proxy**. It doesn't contain your services - it routes traffic to your external services.
+
+```
+Ansible Project (Traefik Only) → Your Services (Separate Projects)
+```
+
+## 📁 Recommended Directory Structure
 
 ```
 /home/user/
-├── ansible/                    # Le déploiement Traefik
-│   ├── docker-compose.yml
-│   ├── traefik/
-│   └── voight-kampff/
+├── ansible/                    # Traefik proxy deployment
+│   ├── docker-compose.yml     # Only contains Traefik
+│   ├── traefik.yml
+│   └── dynamic.yml            # Service routing configuration
 ├── services/
-│   ├── tts/                   # Votre service TTS
+│   ├── voight-kampff/         # Your authentication service
 │   │   ├── docker-compose.yml
 │   │   ├── Dockerfile
 │   │   └── src/
-│   ├── stt/                   # Votre service STT
+│   ├── tts/                   # Your TTS service
 │   │   ├── docker-compose.yml
 │   │   ├── Dockerfile
 │   │   └── src/
-│   ├── llm/                   # Votre service LLM
+│   ├── stt/                   # Your STT service
+│   │   ├── docker-compose.yml
+│   │   ├── Dockerfile
+│   │   └── src/
+│   ├── llm/                   # Your LLM service
 │   │   ├── docker-compose.yml
 │   │   └── models/
-│   └── assistant/             # Votre assistant backend
+│   └── assistant/             # Your assistant backend
 │       ├── docker-compose.yml
 │       └── src/
 ```
 
-## 🔧 Étape 1 : Modifier vos docker-compose existants
+## 🔧 Step 1: Modify Your Existing Docker Compose Files
 
-### Exemple complet pour le service TTS
+### Complete Example for TTS Service
 
-**Fichier : `/home/user/services/tts/docker-compose.yml`**
+**File: `/home/user/services/tts/docker-compose.yml`**
 
 ```yaml
 version: '3.8'
 
-# IMPORTANT: Déclarer le réseau ansible comme externe
+# IMPORTANT: Declare ansible network as external
 networks:
   ansible:
     external: true
@@ -51,21 +63,21 @@ networks:
 services:
   tts:
     build: .
-    # OU : image: your-tts-image:latest
+    # OR: image: your-tts-image:latest
     container_name: tts-service
     restart: unless-stopped
     
-    # ⚠️ IMPORTANT: Connecter au réseau ansible
+    # ⚠️ IMPORTANT: Connect to ansible network
     networks:
       - ansible
     
-    # ❌ NE PAS exposer de ports (Traefik gère tout)
+    # ❌ DO NOT expose ports (Traefik handles everything)
     # ports:
-    #   - "8000:8000"  # ← À SUPPRIMER
+    #   - "8000:8000"  # ← REMOVE THIS
     
     environment:
       - TTS_MODEL=/models/tts.onnx
-      - TTS_VOICE=fr-FR
+      - TTS_VOICE=en-US
       - LOG_LEVEL=info
     
     volumes:
@@ -73,24 +85,8 @@ services:
       - ./cache:/cache
       - ./config.yml:/app/config.yml
     
-    # ✅ Labels Traefik pour le routing et l'authentification
-    labels:
-      # Activer Traefik
-      - "traefik.enable=true"
-      
-      # Routing HTTPS
-      - "traefik.http.routers.tts.rule=Host(`tts.mon_url.com`)"
-      - "traefik.http.routers.tts.entrypoints=websecure"
-      - "traefik.http.routers.tts.tls.certresolver=letsencrypt"
-      
-      # Authentification par Voight-Kampff
-      - "traefik.http.routers.tts.middlewares=vk-tts@docker"
-      - "traefik.http.middlewares.vk-tts.forwardauth.address=http://voight-kampff:8080/verify"
-      - "traefik.http.middlewares.vk-tts.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.vk-tts.forwardauth.authResponseHeaders=X-VK-User,X-VK-Service,X-VK-Scopes"
-      
-      # Port interne de l'application (adapter selon votre app)
-      - "traefik.http.services.tts.loadbalancer.server.port=8000"
+    # ❌ NO TRAEFIK LABELS NEEDED
+    # Configuration is done in dynamic.yml of the Ansible project
     
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -99,9 +95,14 @@ services:
       retries: 3
 ```
 
-### Exemple pour le service STT
+**Key Changes**:
+- ✅ Connect to `ansible` network
+- ❌ Remove all port exposures
+- ❌ **No Traefik labels** - configuration is in Ansible project's [`dynamic.yml`](dynamic.yml:1)
 
-**Fichier : `/home/user/services/stt/docker-compose.yml`**
+### Example for STT Service
+
+**File: `/home/user/services/stt/docker-compose.yml`**
 
 ```yaml
 version: '3.8'
@@ -121,14 +122,14 @@ services:
     
     environment:
       - STT_MODEL_PATH=/models/whisper-large-v3
-      - STT_LANGUAGE=fr
-      - CUDA_VISIBLE_DEVICES=0  # Si vous utilisez GPU
+      - STT_LANGUAGE=en
+      - CUDA_VISIBLE_DEVICES=0  # If using GPU
     
     volumes:
       - ./models:/models
       - ./audio:/audio
     
-    # Montage GPU (si nécessaire)
+    # GPU mount (if needed)
     deploy:
       resources:
         reservations:
@@ -137,21 +138,12 @@ services:
               count: 1
               capabilities: [gpu]
     
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.stt.rule=Host(`stt.mon_url.com`)"
-      - "traefik.http.routers.stt.entrypoints=websecure"
-      - "traefik.http.routers.stt.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.stt.middlewares=vk-stt@docker"
-      - "traefik.http.middlewares.vk-stt.forwardauth.address=http://voight-kampff:8080/verify"
-      - "traefik.http.middlewares.vk-stt.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.vk-stt.forwardauth.authResponseHeaders=X-VK-User,X-VK-Service,X-VK-Scopes"
-      - "traefik.http.services.stt.loadbalancer.server.port=5000"  # Port interne
+    # No Traefik labels - configuration is in Ansible project's dynamic.yml
 ```
 
-### Exemple pour le service LLM
+### Example for LLM Service (vLLM)
 
-**Fichier : `/home/user/services/llm/docker-compose.yml`**
+**File: `/home/user/services/llm/docker-compose.yml`**
 
 ```yaml
 version: '3.8'
@@ -162,21 +154,21 @@ networks:
     name: ansible
 
 services:
-  llm:
-    image: ollama/ollama:latest
-    # OU votre propre image
-    container_name: llm-service
+  qwen-api-server:  # This matches the current configuration
+    image: vllm/vllm-openai:latest
+    container_name: qwen-api-server
     restart: unless-stopped
     networks:
       - ansible
     
     environment:
-      - OLLAMA_MODELS=/models
-      - OLLAMA_HOST=0.0.0.0:11434
+      - VLLM_MODEL_PATH=/models/qwen
+      - VLLM_HOST=0.0.0.0
+      - VLLM_PORT=8000
     
     volumes:
       - ./models:/models
-      - ./cache:/root/.ollama
+      - ./cache:/cache
     
     deploy:
       resources:
@@ -186,21 +178,12 @@ services:
               count: all
               capabilities: [gpu]
     
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.llm.rule=Host(`llm.mon_url.com`)"
-      - "traefik.http.routers.llm.entrypoints=websecure"
-      - "traefik.http.routers.llm.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.llm.middlewares=vk-llm@docker"
-      - "traefik.http.middlewares.vk-llm.forwardauth.address=http://voight-kampff:8080/verify"
-      - "traefik.http.middlewares.vk-llm.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.vk-llm.forwardauth.authResponseHeaders=X-VK-User,X-VK-Service,X-VK-Scopes"
-      - "traefik.http.services.llm.loadbalancer.server.port=11434"
+    # No Traefik labels needed
 ```
 
-### Exemple pour l'Assistant Backend
+### Example for Voight-Kampff Auth Service
 
-**Fichier : `/home/user/services/assistant/docker-compose.yml`**
+**File: `/home/user/services/voight-kampff/docker-compose.yml`**
 
 ```yaml
 version: '3.8'
@@ -210,82 +193,67 @@ networks:
     external: true
     name: ansible
   
-  # Réseau interne pour la base de données (optionnel)
-  assistant-internal:
+  # Internal network for database
+  vk-internal:
     driver: bridge
 
 services:
-  assistant-api:
-    build: ./backend
-    container_name: assistant-api
+  voight-kampff:
+    build: .
+    container_name: voight-kampff
     restart: unless-stopped
     networks:
-      - ansible           # Pour Traefik
-      - assistant-internal  # Pour la DB
+      - ansible      # For Traefik access
+      - vk-internal   # For database access
     
     environment:
-      - DATABASE_URL=postgresql://user:pass@assistant-db:5432/assistant
-      - REDIS_URL=redis://assistant-redis:6379
+      - DATABASE_URL=sqlite:///data/voight-kampff.db
       - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_USERS=admin1,admin2
     
     volumes:
-      - ./backend/src:/app/src
-      - ./data:/data
+      - ./data:/app/data
+      - ./config:/app/config
     
     depends_on:
-      - assistant-db
-      - assistant-redis
+      - vk-db
     
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.assistant.rule=Host(`assistant.mon_url.com`)"
-      - "traefik.http.routers.assistant.entrypoints=websecure"
-      - "traefik.http.routers.assistant.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.assistant.middlewares=vk-assistant@docker"
-      - "traefik.http.middlewares.vk-assistant.forwardauth.address=http://voight-kampff:8080/verify"
-      - "traefik.http.middlewares.vk-assistant.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.vk-assistant.forwardauth.authResponseHeaders=X-VK-User,X-VK-Service,X-VK-Scopes"
-      - "traefik.http.services.assistant.loadbalancer.server.port=8080"
+    # No Traefik labels - Voight-Kampff is configured directly in dynamic.yml
   
-  # Base de données (pas exposée via Traefik)
-  assistant-db:
+  # Database (not exposed via Traefik)
+  vk-db:
     image: postgres:16
-    container_name: assistant-db
+    container_name: vk-db
     restart: unless-stopped
     networks:
-      - assistant-internal  # SEULEMENT le réseau interne
+      - vk-internal  # Only internal network
     
     environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=pass
-      - POSTGRES_DB=assistant
+      - POSTGRES_USER=voightkampff
+      - POSTGRES_PASSWORD=secure_password
+      - POSTGRES_DB=voightkampff
     
     volumes:
       - ./postgres-data:/var/lib/postgresql/data
-  
-  # Redis (pas exposé via Traefik)
-  assistant-redis:
-    image: redis:alpine
-    container_name: assistant-redis
-    restart: unless-stopped
-    networks:
-      - assistant-internal
 ```
 
-## 🚀 Étape 2 : Démarrage des services
+## 🚀 Step 2: Service Startup
 
-### Ordre de démarrage IMPORTANT
+### IMPORTANT Startup Order
 
 ```bash
-# 1. D'abord démarrer Ansible (crée le réseau et Traefik)
+# 1. First start Ansible (creates network and Traefik)
 cd /home/user/ansible
 docker-compose up -d
 
-# Attendre que Traefik soit prêt
+# Wait for Traefik to be ready
 docker-compose logs -f traefik
-# Attendre de voir "Configuration loaded"
+# Wait to see "Configuration loaded"
 
-# 2. Ensuite démarrer vos services dans n'importe quel ordre
+# 2. Then start your services in any order
+cd /home/user/services/voight-kampff
+docker-compose up -d
+
 cd /home/user/services/tts
 docker-compose up -d
 
@@ -294,168 +262,193 @@ docker-compose up -d
 
 cd /home/user/services/llm
 docker-compose up -d
-
-cd /home/user/services/assistant
-docker-compose up -d
 ```
 
-### Script de démarrage automatique
+### Step 3: Configure Services in dynamic.yml
 
-Créez `/home/user/start-all.sh` :
+After starting your services, add them to the Ansible project's [`dynamic.yml`](dynamic.yml:1):
+
+```yaml
+# Add your services to the existing configuration
+http:
+  routers:
+    # Your TTS service
+    my-tts:
+      rule: "Host(`my-tts.caronboulme.fr`)"
+      entryPoints: [websecure]
+      tls:
+        certResolver: letsencrypt
+      service: my-tts-backend
+      middlewares: [vk-hybrid]
+
+  services:
+    # Your TTS backend
+    my-tts-backend:
+      loadBalancer:
+        servers:
+          - url: "http://tts-service:8000"  # Container name from your docker-compose
+```
+
+### Automated Startup Script
+
+Create `/home/user/start-all.sh`:
 
 ```bash
 #!/bin/bash
 set -e
 
-echo "🚀 Démarrage de l'infrastructure Ansible..."
+echo "🚀 Starting Ansible infrastructure..."
 
-# 1. Ansible (Traefik + Voight-Kampff)
+# 1. Start Ansible (Traefik only)
 cd /home/user/ansible
 docker-compose up -d
-echo "✅ Ansible démarré"
+echo "✅ Traefik proxy started"
 
-# Attendre que Traefik soit prêt
-echo "⏳ Attente de Traefik..."
+# Wait for Traefik to be ready
+echo "⏳ Waiting for Traefik..."
 sleep 5
 
-# 2. Services
-echo "🚀 Démarrage des services..."
+# 2. Start external services
+echo "🚀 Starting external services..."
+
+cd /home/user/services/voight-kampff
+docker-compose up -d
+echo "✅ Voight-Kampff started"
 
 cd /home/user/services/tts
 docker-compose up -d
-echo "✅ TTS démarré"
+echo "✅ TTS started"
 
 cd /home/user/services/stt
 docker-compose up -d
-echo "✅ STT démarré"
+echo "✅ STT started"
 
 cd /home/user/services/llm
 docker-compose up -d
-echo "✅ LLM démarré"
-
-cd /home/user/services/assistant
-docker-compose up -d
-echo "✅ Assistant démarré"
+echo "✅ LLM started"
 
 echo ""
-echo "✅ Tous les services sont démarrés!"
+echo "✅ All services are started!"
 echo ""
-echo "Services disponibles:"
-echo "  - https://traefik.mon_url.com (Dashboard Traefik)"
-echo "  - https://auth.mon_url.com (Voight-Kampff)"
-echo "  - https://tts.mon_url.com"
-echo "  - https://stt.mon_url.com"
-echo "  - https://llm.mon_url.com"
-echo "  - https://assistant.mon_url.com"
+echo "Available services:"
+echo "  - https://traefik.caronboulme.fr (Traefik Dashboard - admin only)"
+echo "  - https://auth.caronboulme.fr (Voight-Kampff Auth)"
+echo "  - Configure your services in /home/user/ansible/dynamic.yml"
 echo ""
-echo "Créer une API key:"
-echo "  cd /home/user/ansible && ./scripts/create-api-key.sh"
+echo "Next steps:"
+echo "  1. Add your service configurations to dynamic.yml"
+echo "  2. Restart Traefik: cd /home/user/ansible && docker-compose restart traefik"
 ```
 
-Rendez-le exécutable :
+Make it executable:
 
 ```bash
 chmod +x /home/user/start-all.sh
 ```
 
-## 🛑 Arrêt des services
+## 🛑 Stopping Services
 
-### Script d'arrêt
+### Stop Script
 
-Créez `/home/user/stop-all.sh` :
+Create `/home/user/stop-all.sh`:
 
 ```bash
 #!/bin/bash
 set -e
 
-echo "🛑 Arrêt des services..."
-
-cd /home/user/services/assistant
-docker-compose down
-echo "✅ Assistant arrêté"
+echo "🛑 Stopping external services..."
 
 cd /home/user/services/llm
 docker-compose down
-echo "✅ LLM arrêté"
+echo "✅ LLM stopped"
 
 cd /home/user/services/stt
 docker-compose down
-echo "✅ STT arrêté"
+echo "✅ STT stopped"
 
 cd /home/user/services/tts
 docker-compose down
-echo "✅ TTS arrêté"
+echo "✅ TTS stopped"
+
+cd /home/user/services/voight-kampff
+docker-compose down
+echo "✅ Voight-Kampff stopped"
 
 cd /home/user/ansible
 docker-compose down
-echo "✅ Ansible arrêté"
+echo "✅ Ansible proxy stopped"
 
 echo ""
-echo "✅ Tous les services sont arrêtés"
+echo "✅ All services stopped"
 ```
 
-## 🔄 Redémarrer un service spécifique
+## 🔄 Restart a Specific Service
 
 ```bash
-# Redémarrer juste le service TTS
+# Restart just the TTS service
 cd /home/user/services/tts
 docker-compose restart
 
-# Ou rebuild et redémarrer
+# Or rebuild and restart
 docker-compose up -d --build
+
+# After restarting a service, you may need to restart Traefik
+# to refresh service discovery
+cd /home/user/ansible
+docker-compose restart traefik
 ```
 
-## 🐛 Debug et logs
+## 🐛 Debug and Logs
 
-### Voir les logs d'un service
+### View Service Logs
 
 ```bash
 cd /home/user/services/tts
 docker-compose logs -f
 
-# Ou directement
+# Or directly
 docker logs -f tts-service
 ```
 
-### Vérifier la connexion au réseau
+### Check Network Connection
 
 ```bash
-# Lister les containers sur le réseau ansible
+# List containers on the ansible network
 docker network inspect ansible
 
-# Devrait montrer:
+# Should show:
 # - ansible-traefik
-# - ansible-voight-kampff
+# - voight-kampff
 # - tts-service
 # - stt-service
-# - llm-service
-# - assistant-api
+# - qwen-api-server (or your LLM container)
+# - your other connected services
 ```
 
-### Tester depuis un container
+### Test From Container
 
 ```bash
-# Entrer dans un container
+# Enter a container
 docker exec -it tts-service sh
 
-# Tester la connexion à Voight-Kampff
+# Test connection to Voight-Kampff
 curl http://voight-kampff:8080/health
-# Devrait retourner: {"status":"operational","test":"positive"}
+# Should return: {"status":"operational","health":"positive"}
 
-# Tester les autres services
-curl http://stt:5000/health
-curl http://llm:11434/health
+# Test other services
+curl http://stt-service:8080/health
+curl http://qwen-api-server:8000/health
 ```
 
-## 🔐 Gestion des secrets
+## 🔐 Secrets Management
 
-### Utiliser .env par service
+### Using .env per service
 
 **`/home/user/services/tts/.env`**
 ```env
 TTS_MODEL=tts-v2.onnx
-TTS_API_KEY=local-only-not-for-external
 LOG_LEVEL=debug
+API_TIMEOUT=30
 ```
 
 **`/home/user/services/tts/docker-compose.yml`**
@@ -463,12 +456,12 @@ LOG_LEVEL=debug
 services:
   tts:
     env_file:
-      - .env  # ← Charge automatiquement les variables
+      - .env  # ← Automatically loads variables
 ```
 
-### Centraliser les secrets (optionnel)
+### Centralize secrets (optional)
 
-Créez `/home/user/.env` avec tous vos secrets :
+Create `/home/user/.env` with all your secrets:
 
 ```env
 # TTS
@@ -478,90 +471,95 @@ TTS_MODEL=tts-v2.onnx
 STT_MODEL=whisper-large-v3
 
 # LLM
-LLM_MODEL=llama3:70b
+VLLM_MODEL=qwen2.5:32b
 
-# Assistant
-ASSISTANT_SECRET_KEY=super-secret-key-here
+# Voight-Kampff
+VK_SECRET_KEY=super-secret-key-here
 DATABASE_PASSWORD=postgres-password-here
 ```
 
-Référencez-le dans chaque docker-compose :
+Reference it in each docker-compose:
 
 ```yaml
 services:
   tts:
     env_file:
-      - ../../.env  # Chemin relatif vers le .env central
+      - ../../.env  # Relative path to central .env
 ```
 
-## 📊 Monitoring centralisé
+## 📊 Centralized Monitoring
 
-### Voir tous les services d'un coup
+### View all services at once
 
 ```bash
-# Status de tous les containers
+# Status of all containers
 docker ps --filter "network=ansible" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
-# Logs de tous les services
+# Logs of all services (separate terminals recommended)
 docker-compose -f /home/user/ansible/docker-compose.yml logs -f &
+docker-compose -f /home/user/services/voight-kampff/docker-compose.yml logs -f &
 docker-compose -f /home/user/services/tts/docker-compose.yml logs -f &
 docker-compose -f /home/user/services/stt/docker-compose.yml logs -f &
-docker-compose -f /home/user/services/llm/docker-compose.yml logs -f &
-docker-compose -f /home/user/services/assistant/docker-compose.yml logs -f
+docker-compose -f /home/user/services/llm/docker-compose.yml logs -f
 ```
 
-### Dashboard Traefik
+### Traefik Dashboard
 
-Accédez à `https://traefik.mon_url.com` pour voir :
-- ✅ État de tous les services
-- ✅ Routes configurées
-- ✅ Certificats SSL
-- ✅ Middlewares actifs
+Access `https://traefik.caronboulme.fr` (admin access required) to see:
+- ✅ Status of all services
+- ✅ Configured routes
+- ✅ SSL certificates
+- ✅ Active middlewares
 
-## 🔄 Mise à jour d'un service
+## 🔄 Updating a Service
 
 ```bash
-# 1. Aller dans le répertoire du service
+# 1. Go to service directory
 cd /home/user/services/tts
 
-# 2. Arrêter le service
+# 2. Stop the service
 docker-compose down
 
-# 3. Mettre à jour l'image (si externe)
+# 3. Update image (if external)
 docker-compose pull
 
-# 4. Ou rebuild (si build local)
+# 4. Or rebuild (if local build)
 docker-compose build
 
-# 5. Redémarrer
+# 5. Restart
 docker-compose up -d
 
-# 6. Vérifier les logs
+# 6. Check logs
 docker-compose logs -f
+
+# 7. If you changed container name/port, update dynamic.yml
+# and restart Traefik
+cd /home/user/ansible
+docker-compose restart traefik
 ```
 
-## ✅ Checklist de migration
+## ✅ Migration Checklist
 
-Pour chaque service existant :
+For each existing service:
 
-- [ ] Ajouter `networks: ansible: external: true` en haut du docker-compose
-- [ ] Ajouter `networks: - ansible` au service
-- [ ] **Supprimer** ou commenter tous les `ports:` exposés
-- [ ] Ajouter les **labels Traefik** (copier le template)
-- [ ] Adapter `loadbalancer.server.port` au port **interne** de votre app
-- [ ] Adapter `Host(...)` avec votre sous-domaine réel
-- [ ] Tester : `docker-compose config` (vérifie la syntaxe)
-- [ ] Démarrer : `docker-compose up -d`
-- [ ] Vérifier : `docker-compose logs -f`
-- [ ] Tester l'accès : `curl https://service.mon_url.com/health -H "Authorization: Bearer API_KEY"`
+- [ ] Add `networks: ansible: external: true` at top of docker-compose
+- [ ] Add `networks: - ansible` to the service
+- [ ] **Remove** or comment all exposed `ports:`
+- [ ] **DO NOT add Traefik labels** - configuration is in [`dynamic.yml`](dynamic.yml:1)
+- [ ] Test syntax: `docker-compose config`
+- [ ] Start: `docker-compose up -d`
+- [ ] Verify network: `docker network inspect ansible`
+- [ ] Add service to Ansible project's [`dynamic.yml`](dynamic.yml:1)
+- [ ] Restart Traefik: `cd /home/user/ansible && docker-compose restart traefik`
+- [ ] Test access: `curl https://service.caronboulme.fr/health -H "Authorization: Bearer API_KEY"`
 
-## 🆘 Problèmes courants
+## 🆘 Common Issues
 
 ### "network ansible not found"
 
-**Cause** : Ansible n'est pas démarré ou le réseau n'existe pas
+**Cause**: Ansible is not started or network doesn't exist
 
-**Solution** :
+**Solution**:
 ```bash
 cd /home/user/ansible
 docker-compose up -d
@@ -569,19 +567,19 @@ docker-compose up -d
 
 ### "Container cannot connect to voight-kampff"
 
-**Cause** : Le service n'est pas sur le réseau ansible
+**Cause**: Service is not on ansible network
 
-**Solution** : Vérifier que `networks: - ansible` est bien présent dans le service
+**Solution**: Verify `networks: - ansible` is present in the service
 
-### Service accessible sans API key
+### Service not accessible via Traefik
 
-**Cause** : Le middleware d'authentification n'est pas appliqué
+**Cause**: Service not configured in [`dynamic.yml`](dynamic.yml:1)
 
-**Solution** : Vérifier que le label `traefik.http.routers.XXX.middlewares=vk-XXX@docker` est présent
+**Solution**: Add service configuration to Ansible project's [`dynamic.yml`](dynamic.yml:1)
 
-## 📝 Exemple de migration complète
+## 📝 Complete Migration Example
 
-### Avant (votre docker-compose existant)
+### Before (your existing docker-compose)
 
 ```yaml
 version: '3.8'
@@ -597,7 +595,7 @@ services:
       - ./models:/models
 ```
 
-### Après (intégré à Ansible)
+### After (integrated with Ansible)
 
 ```yaml
 version: '3.8'
@@ -610,29 +608,40 @@ networks:
 services:
   tts:
     build: .
-    # ports: - "8000:8000"  ← SUPPRIMÉ
+    # ports: - "8000:8000"  ← REMOVED
     networks:
-      - ansible  # ← AJOUTÉ
+      - ansible  # ← ADDED
     environment:
       - MODEL=/models/tts.onnx
     volumes:
       - ./models:/models
-    labels:  # ← AJOUTÉ
-      - "traefik.enable=true"
-      - "traefik.http.routers.tts.rule=Host(`tts.mon_url.com`)"
-      - "traefik.http.routers.tts.entrypoints=websecure"
-      - "traefik.http.routers.tts.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.tts.middlewares=vk-tts@docker"
-      - "traefik.http.middlewares.vk-tts.forwardauth.address=http://voight-kampff:8080/verify"
-      - "traefik.http.middlewares.vk-tts.forwardauth.trustForwardHeader=true"
-      - "traefik.http.middlewares.vk-tts.forwardauth.authResponseHeaders=X-VK-User,X-VK-Service,X-VK-Scopes"
-      - "traefik.http.services.tts.loadbalancer.server.port=8000"
+    # NO TRAEFIK LABELS - configuration is in Ansible project's dynamic.yml
 ```
 
-**Modifications** :
-1. ✅ Ajout du réseau externe `ansible`
-2. ✅ Connexion du service au réseau
-3. ❌ Suppression de l'exposition des ports
-4. ✅ Ajout des labels Traefik
+**Then add to Ansible project's [`dynamic.yml`](dynamic.yml:1)**:
 
-C'est tout ! Votre service est maintenant intégré à Ansible avec authentification par API key et HTTPS automatique.
+```yaml
+http:
+  routers:
+    tts:
+      rule: "Host(`tts.caronboulme.fr`)"
+      entryPoints: [websecure]
+      tls:
+        certResolver: letsencrypt
+      service: tts-service
+      middlewares: [vk-hybrid]
+
+  services:
+    tts-service:
+      loadBalancer:
+        servers:
+          - url: "http://tts:8000"  # Container name:port
+```
+
+**Changes**:
+1. ✅ Added external `ansible` network
+2. ✅ Connected service to network
+3. ❌ Removed port exposure
+4. ✅ Added service configuration to Ansible project's [`dynamic.yml`](dynamic.yml:1)
+
+That's it! Your service is now integrated with Ansible proxy with API key authentication and automatic HTTPS.

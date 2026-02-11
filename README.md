@@ -1,6 +1,6 @@
 # Ansible - Traefik Network Deployment
 
-**Ansible** - Named after Ursula K. Le Guin's instantaneous communication device from the Hainish Cycle, this deployment connects all your Docker services through a unified Traefik reverse proxy network.
+**Ansible** - Named after Ursula K. Le Guin's instantaneous communication device from the Hainish Cycle, this deployment provides a unified Traefik reverse proxy network for external services.
 
 ## 🌐 Architecture
 
@@ -13,33 +13,36 @@
                     ┌───────────────────┼───────────────────┐
                     │                   │                   │
           ┌─────────▼──────┐                       ┌──────▼──────┐
-          │ Voight-Kampff  │                       │  TTS/STT/   │
-          │  (Auth Service) │                       │  LLM/Asst   │
+          │ Voight-Kampff  │                       │   External   │
+          │ (Auth Service) │                       │   Services   │
           └────────────────┘                       └─────────────┘
-               API Keys                             Protected by VK
+           API Keys + Cookies                   Protected by Hybrid Auth
 ```
 
-### Services
+### Current Services (caronboulme.fr)
 
-1. **Traefik** (`traefik.mon_url.com`) - Reverse proxy with automatic HTTPS
-2. **Voight-Kampff** (`auth.mon_url.com`) - API Key authentication service
-3. **TTS Service** (`tts.mon_url.com`) - Text-to-Speech (protected by API keys)
-4. **STT Service** (`stt.mon_url.com`) - Speech-to-Text (protected by API keys)
-5. **LLM Service** (`llm.mon_url.com`) - Language Model (protected by API keys)
-6. **Assistant Backend** (`assistant.mon_url.com`) - Assistant API (protected by API keys)
+1. **Traefik Dashboard** (`traefik.caronboulme.fr`) - Reverse proxy dashboard (admin only)
+2. **Voight-Kampff Auth** (`auth.caronboulme.fr`) - Hybrid authentication service (API keys + web interface)
+3. **TheBrain** (`thebrain.caronboulme.fr`) - vLLM FastAPI server (protected)
+4. **Unmute Talk** (`unmute-talk.caronboulme.fr`) - TTS service (protected)
+5. **Unmute Transcript** (`unmute-transcript.caronboulme.fr`) - STT service (protected)
+6. **Chatterbox** (`chatterbox.caronboulme.fr`) - Alternative TTS service (protected)
+7. **Photos** (`photos.caronboulme.fr`) - Immich photo management (has its own auth)
 
-## 🔐 Authentication Strategy
+## 🔐 Hybrid Authentication Strategy
 
-All services (TTS, STT, LLM, Assistant) are protected by **Voight-Kampff** API key authentication:
-- Fine-grained access control per service
-- Multiple API keys with different scopes
-- Bearer token authentication via HTTP headers
+Services are protected by **Voight-Kampff** hybrid authentication:
+- **API Keys** for programmatic access (Bearer tokens)
+- **Web Interface** with cookies for browser access
+- **Admin detection** for sensitive services (like Traefik dashboard)
+- **Service-specific scopes** and access control
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
 - Docker and Docker Compose installed
+- External services (voight-kampff, thebrain, etc.) running and connected to the `ansible` network
 - A domain name pointing to your server
 - Ports 80 and 443 available
 
@@ -47,18 +50,19 @@ All services (TTS, STT, LLM, Assistant) are protected by **Voight-Kampff** API k
 
 1. **Clone/Navigate to the ansible directory**
    ```bash
-   cd ansible
+   cd /path/to/Ansible
    ```
 
 2. **Update Traefik email for Let's Encrypt certificates**
    ```bash
-   nano traefik/traefik.yml
+   nano traefik.yml
    # Change line 33: email: your-email@example.com
    ```
 
-3. **Update your domain in docker-compose.yml**
+3. **Update your domain in configuration files**
    ```bash
-   sed -i 's/mon_url.com/yourdomain.com/g' docker-compose.yml
+   # Update traefik.yml and dynamic.yml
+   sed -i 's/caronboulme.fr/yourdomain.com/g' traefik.yml dynamic.yml
    ```
 
 4. **Create required directories and set permissions**
@@ -68,86 +72,50 @@ All services (TTS, STT, LLM, Assistant) are protected by **Voight-Kampff** API k
    chmod 600 traefik/acme.json
    ```
 
-5. **Update your service images**
-   Edit `docker-compose.yml` and replace:
-   - `your-tts-image:latest`
-   - `your-stt-image:latest`
-   - `your-llm-image:latest`
-   - `your-assistant-image:latest`
-   
-   With your actual Docker images.
+5. **Configure your services in dynamic.yml**
+   Edit [`dynamic.yml`](dynamic.yml:1) to:
+   - Update service hostnames to your domain
+   - Configure service backends (container names and ports)
+   - Adjust middleware settings as needed
 
-6. **Start the services**
+6. **Start Traefik**
    ```bash
    docker-compose up -d
    ```
 
-7. **Check logs**
+7. **Connect your external services**
+   Ensure your services are connected to the `ansible` network:
+   ```bash
+   docker network connect ansible your-service-container
+   ```
+
+8. **Check logs**
    ```bash
    docker-compose logs -f
    ```
 
-## 🔑 Managing API Keys
+## 🔑 Authentication & Access
 
-### Create an API Key
+### Web Interface Access
 
+Visit the Voight-Kampff web interface for user-friendly API key management:
 ```bash
-curl -X POST https://auth.mon_url.com/keys \
-  -H "Content-Type: application/json" \
-  -d '{
-    "key_name": "mobile-app",
-    "user": "john",
-    "scopes": ["tts", "stt", "llm", "assistant"],
-    "expires_in_days": 365
-  }'
+https://auth.caronboulme.fr
 ```
 
-Response:
-```json
-{
-  "id": 1,
-  "key_name": "mobile-app",
-  "api_key": "kXy8vZ3mQ9wR5tN7pL4jH2fG6sA1dK0bC...",
-  "user": "john",
-  "scopes": ["tts", "stt", "llm", "assistant"],
-  "is_active": true,
-  "created_at": "2026-02-10T15:00:00",
-  "last_used": null,
-  "expires_at": "2027-02-10T15:00:00"
-}
-```
+### API Key Management
 
-**⚠️ Important:** Save the `api_key` value - it won't be shown again!
-
-### List All API Keys
-
-```bash
-curl https://auth.mon_url.com/keys
-```
-
-### Delete an API Key
-
-```bash
-curl -X DELETE https://auth.mon_url.com/keys/1
-```
-
-### Enable/Disable an API Key
-
-```bash
-curl -X PATCH https://auth.mon_url.com/keys/1/toggle
-```
-
-## 📱 Using API Keys
+**Note:** API key creation/management is handled by the external Voight-Kampff service. Refer to the Voight-Kampff documentation for detailed API key operations.
 
 ### Making Requests to Protected Services
 
 Include the API key in the `Authorization` header:
 
 ```bash
-curl https://tts.mon_url.com/api/synthesize \
+curl https://thebrain.caronboulme.fr/v1/completions \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"text": "Hello world"}'
+  -d '{"model": "qwen", "prompt": "Hello"}'
 ```
 
 ### Python Example
@@ -161,86 +129,83 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# TTS Service
+# TheBrain (LLM) Service
 response = requests.post(
-    "https://tts.mon_url.com/api/synthesize",
+    "https://thebrain.caronboulme.fr/v1/completions",
+    headers=headers,
+    json={"model": "qwen", "prompt": "Hello world"}
+)
+
+# TTS Service (Unmute Talk)
+response = requests.post(
+    "https://unmute-talk.caronboulme.fr/tts",
     headers=headers,
     json={"text": "Hello world"}
 )
 
-# STT Service
-response = requests.post(
-    "https://stt.mon_url.com/api/transcribe",
-    headers=headers,
-    files={"audio": open("audio.wav", "rb")}
-)
+# STT Service (Unmute Transcript)
+with open("audio.wav", "rb") as audio_file:
+    response = requests.post(
+        "https://unmute-transcript.caronboulme.fr/transcribe",
+        headers=headers,
+        files={"audio": audio_file}
+    )
 ```
 
-## 🎯 Scopes and Permissions
+## 🎯 Hybrid Authentication
 
-Each API key can have specific scopes limiting access to services:
+The system supports both API keys and web authentication:
 
-- `tts` - Text-to-Speech service only
-- `stt` - Speech-to-Text service only
-- `llm` - Language Model service only
-- `assistant` - Assistant backend only
-- `*` - All services (wildcard)
-
-**Example: Create a key with limited access**
-```bash
-curl -X POST https://auth.mon_url.com/keys \
-  -H "Content-Type: application/json" \
-  -d '{
-    "key_name": "tts-only-key",
-    "user": "demo",
-    "scopes": ["tts"],
-    "expires_in_days": 30
-  }'
-```
-
-This key can **only** access `tts.mon_url.com`, attempts to access other services will be denied.
+- **API Keys** - For programmatic access via Bearer tokens
+- **Web Cookies** - For browser-based access (automatically handled)
+- **Admin Detection** - Admin users can access sensitive services like Traefik dashboard
+- **Service Scopes** - Fine-grained access control per service
 
 ## 🔧 Maintenance
 
 ### View Logs
 
 ```bash
-# All services
-docker-compose logs -f
-
-# Specific service
+# Traefik logs
 docker-compose logs -f traefik
-docker-compose logs -f voight-kampff
 
 # Traefik access logs
 tail -f traefik/logs/access.log
+
+# Check all external services connected to ansible network
+docker ps --filter "network=ansible"
 ```
 
 ### Restart Services
 
 ```bash
-# All services
-docker-compose restart
-
-# Specific service
+# Restart Traefik
 docker-compose restart traefik
+
+# Update Traefik
+docker-compose pull traefik
+docker-compose up -d traefik
 ```
 
-### Update Services
+### Configuration Updates
 
 ```bash
-docker-compose pull
-docker-compose up -d
+# Reload dynamic.yml changes (automatic with file provider)
+# Changes are picked up within seconds
+
+# For traefik.yml changes, restart is required:
+docker-compose restart traefik
 ```
 
 ### Backup
 
 ```bash
-# Backup Voight-Kampff database (API keys)
-cp voight-kampff/data/voight-kampff.db voight-kampff.db.backup
-
 # Backup Traefik certificates
 cp traefik/acme.json acme.json.backup
+
+# Backup configuration
+cp dynamic.yml dynamic.yml.backup
+cp traefik.yml traefik.yml.backup
 ```
 
 ## 🐛 Troubleshooting
@@ -252,44 +217,64 @@ cp traefik/acme.json acme.json.backup
 3. Ensure ports 80 and 443 are open
 4. Check `traefik/acme.json` permissions: `chmod 600 traefik/acme.json`
 
-### API Key Not Working
-
-1. Verify the key exists: `curl https://auth.mon_url.com/keys`
-2. Check it's active and not expired
-3. Verify the scope includes the service you're accessing
-4. Check Voight-Kampff logs: `docker-compose logs voight-kampff`
-
 ### Service Not Accessible
 
-1. Check if container is running: `docker-compose ps`
-2. Verify Traefik labels: `docker inspect <container_name>`
-3. Check Traefik dashboard: `https://traefik.mon_url.com`
+1. Check if external service is running and connected to network:
+   ```bash
+   docker network inspect ansible
+   ```
+2. Verify service configuration in [`dynamic.yml`](dynamic.yml:1)
+3. Check Traefik dashboard: `https://traefik.caronboulme.fr` (admin access required)
 4. Review Traefik logs: `docker-compose logs traefik`
+
+### Authentication Issues
+
+1. Check Voight-Kampff service is running and accessible
+2. Verify the service can reach `http://voight-kampff:8080/verify`
+3. Test authentication endpoint:
+   ```bash
+   curl -H "Authorization: Bearer YOUR_KEY" https://auth.caronboulme.fr/verify
+   ```
 
 ## 📊 Network Details
 
 - **Network Name:** `ansible`
 - **Driver:** bridge
-- All services communicate internally using container names
+- **Purpose:** Connect external services to Traefik reverse proxy
+- External services must join this network to be accessible through Traefik
 - Only Traefik exposes ports 80/443 to the host
+
+### Connecting External Services
+
+```bash
+# Connect existing service to ansible network
+docker network connect ansible your-service-container
+
+# Or in docker-compose.yml:
+networks:
+  ansible:
+    external: true
+    name: ansible
+```
 
 ## 🔐 Security Recommendations
 
-1. **Use strong API keys** (automatically generated by Voight-Kampff)
-2. **Set expiration dates** for temporary access
-3. **Regularly review** active API keys
-4. **Enable firewall** to only allow ports 80/443
-5. **Keep services updated** with `docker-compose pull`
-6. **Monitor access logs** regularly
-7. **Backup** the Voight-Kampff database
-8. **Change Traefik dashboard authentication** in `traefik/dynamic.yml`
+1. **Configure strong authentication** in Voight-Kampff
+2. **Regularly review** active API keys and users
+3. **Enable firewall** to only allow ports 80/443
+4. **Keep Traefik updated** with `docker-compose pull`
+5. **Monitor access logs** regularly
+6. **Secure admin access** to Traefik dashboard
+7. **Use HTTPS everywhere** (automatically handled by Traefik)
+8. **Review service configurations** in [`dynamic.yml`](dynamic.yml:1) regularly
 
 ## 📚 References
 
-- [Traefik Documentation](https://doc.traefik.io/traefik/)
+- [Traefik v3 Documentation](https://doc.traefik.io/traefik/)
 - [Let's Encrypt](https://letsencrypt.org/)
+- [Docker Networks](https://docs.docker.com/network/)
 
 ---
 
-**Named after:** Ansible (Ursula K. Le Guin's Hainish Cycle) - Instantaneous communication across vast distances  
+**Named after:** Ansible (Ursula K. Le Guin's Hainish Cycle) - Instantaneous communication across vast distances
 **Authentication:** Voight-Kampff (Blade Runner) - The test to determine humanity
