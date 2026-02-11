@@ -9,7 +9,7 @@ services:
   # Traefik - Reverse Proxy
   ansible:
     image: traefik:v3.0
-    container_name: ansible-traefik
+    container_name: ansible
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
