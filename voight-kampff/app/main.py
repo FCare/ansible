@@ -336,11 +336,38 @@ async def login_submit(
     # Create session
     session_token = serialize_session(user.id)
     
-    # Prepare response
+    # Prepare response - redirect to first authorized service or dashboard
     if redirect_after:
         response = RedirectResponse(url=redirect_after, status_code=303)
     else:
-        response = RedirectResponse(url="/auth/dashboard", status_code=303)
+        # Find first authorized service for this user (same logic as in /landing)
+        user_scopes = []
+        if user.allowed_scopes == "*":
+            user_scopes = ["thebrain", "chatterbox", "unmute-talk", "unmute-transcript"]
+        elif user.allowed_scopes:
+            user_scopes = [s.strip() for s in user.allowed_scopes.split(',') if s.strip()]
+        
+        print(f"🔍 LOGIN DEBUG - User {user.username} scopes: {user_scopes}")
+        
+        # Priority order for redirection: thebrain > chatterbox > unmute-talk > unmute-transcript
+        service_priority = [
+            ("thebrain", "https://thebrain.caronboulme.fr"),
+            ("chatterbox", "https://chatterbox.caronboulme.fr"),
+            ("unmute-talk", "https://unmute-talk.caronboulme.fr"),
+            ("unmute-transcript", "https://unmute-transcript.caronboulme.fr")
+        ]
+        
+        # Find first authorized service
+        redirect_url = "/auth/dashboard"  # Default fallback
+        for service_name, service_url in service_priority:
+            if service_name in user_scopes:
+                redirect_url = service_url
+                print(f"🔍 LOGIN DEBUG - Redirecting {user.username} to {service_name}: {service_url}")
+                break
+        else:
+            print(f"🔍 LOGIN DEBUG - No authorized services for {user.username}, redirecting to dashboard")
+        
+        response = RedirectResponse(url=redirect_url, status_code=303)
     
     # Set session cookie
     response.set_cookie(
