@@ -232,6 +232,35 @@
                 font-size: 0.85em;
             }
         }
+        
+        .service-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            background: #f5f5f5;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: 2px solid #ddd;
+        }
+        
+        .service-label:has(input:checked) {
+            background: #e8f5e8;
+            color: #2e7d2e;
+            border-color: #4ecdc4;
+        }
+        
+        .service-label input[type="checkbox"] {
+            margin: 0;
+            transform: scale(1.2);
+        }
+        
+        .service-label span {
+            font-weight: 500;
+            font-size: 0.9em;
+        }
     </style>
     <script>
         function toggleAllServices(allCheckbox, userId) {
@@ -465,52 +494,52 @@
                                             {% set user_scopes = admin_user.allowed_scopes.split(',') if admin_user.allowed_scopes != "*" else [] %}
                                             {% set all_services = admin_user.allowed_scopes == "*" %}
                                             
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.85em;">
-                                                <label style="display: flex; align-items: center; gap: 8px;">
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; font-size: 0.9em;">
+                                                <label class="service-label" data-service="all">
                                                     <input type="checkbox" name="service" value="*"
                                                            {% if all_services %}checked{% endif %}
                                                            onchange="toggleAllServices(this, '{{ admin_user.id }}'); submitScopeForm('{{ admin_user.id }}')">
-                                                    <strong>Tous les services</strong>
+                                                    <span>Tous les services</span>
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="service-label" data-service="thebrain">
                                                     <input type="checkbox" name="service" value="thebrain"
                                                            {% if "thebrain" in user_scopes or all_services %}checked{% endif %}
                                                            {% if all_services %}disabled{% endif %}
                                                            onchange="submitScopeForm('{{ admin_user.id }}')">
-                                                    TheBrain
+                                                    <span>TheBrain</span>
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="service-label" data-service="tts">
                                                     <input type="checkbox" name="service" value="tts"
                                                            {% if "tts" in user_scopes or all_services %}checked{% endif %}
                                                            {% if all_services %}disabled{% endif %}
                                                            onchange="submitScopeForm('{{ admin_user.id }}')">
-                                                    TTS
+                                                    <span>TTS</span>
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="service-label" data-service="stt">
                                                     <input type="checkbox" name="service" value="stt"
                                                            {% if "stt" in user_scopes or all_services %}checked{% endif %}
                                                            {% if all_services %}disabled{% endif %}
                                                            onchange="submitScopeForm('{{ admin_user.id }}')">
-                                                    STT
+                                                    <span>STT</span>
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="service-label" data-service="immich">
                                                     <input type="checkbox" name="service" value="immich"
                                                            {% if "immich" in user_scopes or all_services %}checked{% endif %}
                                                            {% if all_services %}disabled{% endif %}
                                                            onchange="submitScopeForm('{{ admin_user.id }}')">
-                                                    Immich
+                                                    <span>Immich</span>
                                                 </label>
                                                 
-                                                <label style="display: flex; align-items: center; gap: 8px;">
+                                                <label class="service-label" data-service="analytics">
                                                     <input type="checkbox" name="service" value="analytics"
                                                            {% if "analytics" in user_scopes or all_services %}checked{% endif %}
                                                            {% if all_services %}disabled{% endif %}
                                                            onchange="submitScopeForm('{{ admin_user.id }}')">
-                                                    Analytics
+                                                    <span>Analytics</span>
                                                 </label>
                                             </div>
                                         </form>

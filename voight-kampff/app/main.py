@@ -54,7 +54,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     max_api_keys: Mapped[int] = mapped_column(Integer, default=100)  # Hardcoded to 100
-    allowed_scopes: Mapped[str] = mapped_column(Text, default="*")  # Allowed services for this user
+    allowed_scopes: Mapped[str] = mapped_column(Text, default="")  # Allowed services for this user - NONE by default
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     last_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
