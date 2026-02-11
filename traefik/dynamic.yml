@@ -28,45 +28,31 @@ http:
         period: 1s
         burst: 50
 
-    # API Key Authentication middlewares
-    vk-tts:
+    # Hybrid Authentication middlewares (API Key + Cookie)
+    vk-hybrid:
       forwardAuth:
         address: "http://ansible-voight-kampff:8080/verify"
         trustForwardHeader: true
-        authResponseHeaders:
-          - X-VK-User
-          - X-VK-Service
-          - X-VK-Scopes
-
-    vk-stt:
-      forwardAuth:
-        address: "http://ansible-voight-kampff:8080/verify"
-        trustForwardHeader: true
-        authResponseHeaders:
-          - X-VK-User
-          - X-VK-Service
-          - X-VK-Scopes
-
-    vk-chatterbox:
-      forwardAuth:
-        address: "http://ansible-voight-kampff:8080/verify"
-        trustForwardHeader: true
-        authResponseHeaders:
-          - X-VK-User
-          - X-VK-Service
-          - X-VK-Scopes
-
-    vk-thebrain:
-      forwardAuth:
-        address: "http://ansible-voight-kampff:8080/verify"
-        trustForwardHeader: true
+        authRequestHeaders:
+          - Authorization
+          - X-API-Key
+          - Cookie
         authResponseHeaders:
           - X-VK-User
           - X-VK-Service
           - X-VK-Scopes
 
   routers:
-    # TTS Service - Unmute Talk (protected by API key)
+    # Auth Service - Web Interface
+    auth:
+      rule: "Host(`auth.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: auth-service
+
+    # TTS Service - Unmute Talk (protected by hybrid auth)
     unmute-talk:
       rule: "Host(`unmute-talk.caronboulme.fr`)"
       entryPoints:
@@ -75,9 +61,9 @@ http:
         certResolver: letsencrypt
       service: tts-service
       middlewares:
-        - vk-tts
+        - vk-hybrid
 
-    # STT Service - Unmute Transcript (protected by API key)
+    # STT Service - Unmute Transcript (protected by hybrid auth)
     unmute-transcript:
       rule: "Host(`unmute-transcript.caronboulme.fr`)"
       entryPoints:
@@ -86,9 +72,9 @@ http:
         certResolver: letsencrypt
       service: stt-service
       middlewares:
-        - vk-stt
+        - vk-hybrid
 
-    # Chatterbox TTS Service (protected by API key)
+    # Chatterbox TTS Service (protected by hybrid auth)
     chatterbox:
       rule: "Host(`chatterbox.caronboulme.fr`)"
       entryPoints:
@@ -97,9 +83,9 @@ http:
         certResolver: letsencrypt
       service: chatterbox-service
       middlewares:
-        - vk-chatterbox
+        - vk-hybrid
 
-    # vLLM FastAPI - The Brain (protected by API key)
+    # vLLM FastAPI - The Brain (protected by hybrid auth)
     thebrain:
       rule: "Host(`thebrain.caronboulme.fr`)"
       entryPoints:
@@ -108,7 +94,7 @@ http:
         certResolver: letsencrypt
       service: vllm-service
       middlewares:
-        - vk-thebrain
+        - vk-hybrid
 
     # Immich - Photo Management
     immich:
@@ -120,6 +106,12 @@ http:
       service: immich-service
 
   services:
+    # Auth Service - Voight-Kampff Web Interface
+    auth-service:
+      loadBalancer:
+        servers:
+          - url: "http://ansible-voight-kampff:8080"
+
     # Unmute Services
     tts-service:
       loadBalancer:

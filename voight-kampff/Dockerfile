@@ -9,6 +9,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application
 COPY app/ ./
 
+# Copy templates
+COPY templates/ ./templates/
+
 # Create data directory
 RUN mkdir -p /data
 
