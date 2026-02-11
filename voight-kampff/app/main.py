@@ -1158,10 +1158,57 @@ async def landing_page(
     
     if is_authenticated:
         if is_from_www:
-            # Only redirect to TheBrain if coming from www.caronboulme.fr
-            redirect_url = "https://thebrain.caronboulme.fr"
-            title = f"Welcome back, {user_name}!"
-            message = f"Hello {user_name}, redirecting you to The Brain..."
+            # Get user from database to check their allowed scopes
+            session_cookie = request.cookies.get("vk_session")
+            user_id = deserialize_session(session_cookie) if session_cookie else None
+            
+            if user_id:
+                user_result = await session_db.execute(
+                    select(User).where(User.id == user_id, User.is_active == True)
+                )
+                user = user_result.scalar_one_or_none()
+                
+                if user:
+                    user_scopes = []
+                    if user.allowed_scopes == "*":
+                        user_scopes = ["thebrain", "chatterbox", "unmute-talk", "unmute-transcript"]
+                    elif user.allowed_scopes:
+                        user_scopes = [s.strip() for s in user.allowed_scopes.split(',') if s.strip()]
+                    
+                    print(f"🔍 LANDING DEBUG - User scopes: {user_scopes}")
+                    
+                    # Priority order for redirection: thebrain > chatterbox > unmute-talk > unmute-transcript
+                    service_priority = [
+                        ("thebrain", "https://thebrain.caronboulme.fr", "The Brain"),
+                        ("chatterbox", "https://chatterbox.caronboulme.fr", "Chatterbox"),
+                        ("unmute-talk", "https://unmute-talk.caronboulme.fr", "Unmute Talk"),
+                        ("unmute-transcript", "https://unmute-transcript.caronboulme.fr", "Unmute Transcript")
+                    ]
+                    
+                    # Find first authorized service
+                    for service_name, service_url, display_name in service_priority:
+                        if service_name in user_scopes:
+                            redirect_url = service_url
+                            title = f"Welcome back, {user_name}!"
+                            message = f"Hello {user_name}, redirecting you to {display_name}..."
+                            print(f"🔍 LANDING DEBUG - Redirecting to {service_name}: {service_url}")
+                            break
+                    else:
+                        # No authorized services found, redirect to dashboard
+                        redirect_url = "https://auth.caronboulme.fr/auth/dashboard"
+                        title = f"Welcome back, {user_name}!"
+                        message = f"Hello {user_name}, no authorized services found. Redirecting to dashboard..."
+                        print(f"🔍 LANDING DEBUG - No authorized services, redirecting to dashboard")
+                else:
+                    # User not found, redirect to login
+                    redirect_url = "https://auth.caronboulme.fr/auth/login"
+                    title = "Authentication Required"
+                    message = "Please login to access your services..."
+            else:
+                # No valid session, redirect to login
+                redirect_url = "https://auth.caronboulme.fr/auth/login"
+                title = "Authentication Required"
+                message = "Please login to access your services..."
         else:
             # From auth.caronboulme.fr or other domains, show landing page without redirect
             redirect_url = None  # No automatic redirect
