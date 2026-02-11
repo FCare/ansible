@@ -245,18 +245,35 @@ async def startup_event():
     print(f"🌐 Web interface available at /auth/")
 
 @app.get("/")
-async def root():
-    return {
-        "service": "Voight-Kampff",
-        "version": "2.0.0",
-        "description": "API Key Authentication Service with Web Interface",
-        "endpoints": {
-            "verify": "/verify - Verify API key (used by Traefik ForwardAuth)",
-            "keys": "/keys - Manage API keys",
-            "web": "/auth/ - Web interface",
-            "health": "/health - Health check"
-        }
-    }
+async def root(request: Request, session_db: AsyncSession = Depends(get_session)):
+    print(f"🔍 ROOT DEBUG - Root endpoint accessed from host: {request.headers.get('host')}")
+    
+    # Check if user is already logged in with valid session
+    is_authenticated, user_name, db_key = await check_authentication(
+        request, session_db, "auth", None, None
+    )
+    
+    print(f"🔍 ROOT DEBUG - Authentication result: is_authenticated={is_authenticated}, user_name={user_name}")
+    
+    # Get the host to determine source domain
+    host = request.headers.get('host', '')
+    is_from_www = host.startswith('www.caronboulme.fr')
+    
+    print(f"🔍 ROOT DEBUG - Is from www.caronboulme.fr: {is_from_www}")
+    
+    if is_authenticated and user_name and user_name != "unknown":
+        if is_from_www:
+            # Only redirect to TheBrain if coming from www.caronboulme.fr
+            print(f"🔍 ROOT DEBUG - Redirecting to TheBrain from www")
+            return RedirectResponse(url="https://thebrain.caronboulme.fr/", status_code=302)
+        else:
+            # From auth.caronboulme.fr or other domains, redirect to dashboard
+            print(f"🔍 ROOT DEBUG - Redirecting to dashboard from auth/other")
+            return RedirectResponse(url="/auth/dashboard", status_code=302)
+    
+    # No valid session, redirect to login page
+    print(f"🔍 ROOT DEBUG - Not authenticated, redirecting to login")
+    return RedirectResponse(url="/auth/login", status_code=302)
 
 @app.get("/health")
 async def health():
@@ -332,7 +349,8 @@ async def login_submit(
         max_age=SESSION_EXPIRE_HOURS * 3600,
         httponly=True,
         secure=True,
-        samesite="lax"
+        samesite="lax",
+        domain=".caronboulme.fr"  # Allow cookie on all subdomains
     )
     
     return response
@@ -640,8 +658,17 @@ async def delete_key_web(
 @app.get("/auth/logout")
 async def logout():
     """Logout and clear session"""
+    print(f"🔍 LOGOUT DEBUG - User logged out")
     response = RedirectResponse(url="/auth/login", status_code=303)
-    response.delete_cookie(key="vk_session")
+    
+    # Delete cookie with same domain settings as when it was created
+    response.delete_cookie(
+        key="vk_session",
+        domain=".caronboulme.fr",  # Same domain as when cookie was set
+        secure=True,
+        samesite="lax"
+    )
+    print(f"🔍 LOGOUT DEBUG - Session cookie deleted for domain .caronboulme.fr")
     return response
 
 # ========== ADMIN ENDPOINTS ==========
@@ -895,21 +922,27 @@ async def check_authentication(
     Returns: (is_authenticated, username, api_key_record)
     """
     
+    print(f"🔍 AUTH DEBUG - Starting check_authentication for service: {service}")
+    
     api_key = None
     user_name = "unknown"
     
     # Method 1: Try Authorization header (Bearer token)
     if authorization and authorization.startswith("Bearer "):
         api_key = authorization.replace("Bearer ", "").strip()
+        print(f"🔍 AUTH DEBUG - Using Bearer token")
     
     # Method 2: Try X-API-Key header
     elif x_api_key:
         api_key = x_api_key.strip()
+        print(f"🔍 AUTH DEBUG - Using X-API-Key header")
     
     # Method 3: Try session cookie
     elif request.cookies.get("vk_session"):
         session_cookie = request.cookies.get("vk_session")
+        print(f"🔍 AUTH DEBUG - Found session cookie, deserializing...")
         user_id = deserialize_session(session_cookie)
+        print(f"🔍 AUTH DEBUG - Deserialized user_id: {user_id}")
         
         if user_id:
             # Get user from database
@@ -917,26 +950,59 @@ async def check_authentication(
                 select(User).where(User.id == user_id, User.is_active == True)
             )
             user = user_result.scalar_one_or_none()
+            print(f"🔍 AUTH DEBUG - User query result: {user.username if user else 'None'}")
             
             if user:
                 user_name = user.username
+                print(f"🔍 AUTH DEBUG - User found: {user_name}, allowed_scopes: {user.allowed_scopes}, is_admin: {user.is_admin}")
                 
                 # For session cookies, verify USER scopes (admin-controlled permissions)
-                user_allowed_scopes = [s.strip() for s in user.allowed_scopes.split(',') if s.strip()]
+                if user.allowed_scopes is None or user.allowed_scopes.strip() == "":
+                    # No scopes defined, deny access (except auth service)
+                    user_allowed_scopes = []
+                    print(f"🔍 AUTH DEBUG - No scopes defined for user")
+                else:
+                    user_allowed_scopes = [s.strip() for s in user.allowed_scopes.split(',') if s.strip()]
+                    print(f"🔍 AUTH DEBUG - User allowed scopes: {user_allowed_scopes}")
+                
+                # Admin users automatically get traefik access
+                if user.is_admin and 'traefik' not in user_allowed_scopes:
+                    user_allowed_scopes.append('traefik')
+                    print(f"🔍 AUTH DEBUG - Admin user: automatically added traefik access")
                 
                 # Special case: always allow access to auth service for session management
                 if service == "auth":
                     api_key = f"session_{user_id}_{service}"
-                elif '*' in user_allowed_scopes or service in user_allowed_scopes:
-                    # User has permission for this service
+                    print(f"🔍 AUTH DEBUG - Allowing auth service access")
+                elif service == "*":
+                    # Landing page or general access check - allow if user has any scopes or is admin
+                    if user.allowed_scopes == "*" or user.allowed_scopes.strip() != "" or user.is_admin:
+                        api_key = f"session_{user_id}_{service}"
+                        print(f"🔍 AUTH DEBUG - Allowing general access (*) - user has scopes: {user.allowed_scopes}")
+                    else:
+                        print(f"🔍 AUTH DEBUG - User {user_name} has no scopes for general access")
+                        return False, None, None
+                elif user.allowed_scopes == "*" or '*' in user_allowed_scopes or service in user_allowed_scopes:
+                    # User has permission for this specific service
                     api_key = f"session_{user_id}_{service}"
+                    print(f"🔍 AUTH DEBUG - User has permission for service {service}")
                 else:
                     # User doesn't have permission for this service
+                    print(f"🔍 AUTH DEBUG - User {user_name} does NOT have permission for service {service}")
                     return False, None, None
+            else:
+                print(f"🔍 AUTH DEBUG - No active user found for user_id {user_id}")
+        else:
+            print(f"🔍 AUTH DEBUG - Failed to deserialize session cookie")
+    else:
+        print(f"🔍 AUTH DEBUG - No authentication method found")
     
     # If no authentication method found
     if not api_key:
+        print(f"🔍 AUTH DEBUG - No API key generated, authentication failed")
         return False, None, None
+    
+    print(f"🔍 AUTH DEBUG - API key generated: {api_key[:20]}...")
     
     # Handle session-based authentication (pseudo API keys)
     if api_key.startswith("session_"):
@@ -996,8 +1062,17 @@ async def verify_api_key(
     if x_forwarded_host:
         service = x_forwarded_host.split('.')[0]
     
+    # Debug logging
+    print(f"🔍 VERIFY DEBUG - Service: {service}")
+    print(f"🔍 VERIFY DEBUG - X-Forwarded-Host: {x_forwarded_host}")
+    print(f"🔍 VERIFY DEBUG - X-Forwarded-Uri: {x_forwarded_uri}")
+    print(f"🔍 VERIFY DEBUG - Authorization header: {'Bearer ***' if authorization and authorization.startswith('Bearer') else authorization}")
+    print(f"🔍 VERIFY DEBUG - X-API-Key header: {'***' if x_api_key else None}")
+    print(f"🔍 VERIFY DEBUG - Session cookie: {'present' if request.cookies.get('vk_session') else 'absent'}")
+    
     # Special case: Allow unrestricted access to photos/immich (has its own auth)
     if service == "photos":
+        print(f"🔍 VERIFY DEBUG - Photos service bypass")
         return JSONResponse(
             status_code=200,
             content={"valid": True, "user": "immich-bypass", "service": service},
@@ -1008,11 +1083,15 @@ async def verify_api_key(
         )
     
     # Check authentication using common function for other services
+    print(f"🔍 VERIFY DEBUG - Calling check_authentication for service: {service}")
     is_authenticated, user_name, db_key = await check_authentication(
         request, session_db, service, authorization, x_api_key
     )
     
+    print(f"🔍 VERIFY DEBUG - Authentication result: is_authenticated={is_authenticated}, user_name={user_name}, db_key={'present' if db_key else 'None'}")
+    
     if not is_authenticated:
+        print(f"🔍 VERIFY DEBUG - Authentication FAILED for service {service}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing or invalid authentication"
@@ -1033,13 +1112,16 @@ async def verify_api_key(
             )
     
     # Return success with custom headers
+    # Handle session cookies where db_key is None
+    scopes = db_key.scopes if db_key else "session"
+    
     return JSONResponse(
         status_code=200,
         content={"valid": True, "user": user_name, "service": service},
         headers={
             "X-VK-User": user_name,
             "X-VK-Service": service,
-            "X-VK-Scopes": db_key.scopes
+            "X-VK-Scopes": scopes
         }
     )
 
@@ -1052,96 +1134,247 @@ async def landing_page(
     session_db: AsyncSession = Depends(get_session)
 ):
     """
-    Landing page that redirects based on authentication status
-    - Authenticated: Redirect to thebrain.caronboulme.fr
+    Landing page that redirects based on authentication status and source domain
+    - From www.caronboulme.fr + authenticated: Redirect to thebrain.caronboulme.fr
+    - From auth.caronboulme.fr + authenticated: Redirect to dashboard
     - Not authenticated: Redirect to auth.caronboulme.fr/auth/login
     """
+    
+    print(f"🔍 LANDING DEBUG - Starting landing page authentication check")
+    print(f"🔍 LANDING DEBUG - Session cookie present: {'yes' if request.cookies.get('vk_session') else 'no'}")
+    print(f"🔍 LANDING DEBUG - Host header: {request.headers.get('host')}")
     
     # Check authentication (no specific service required for landing)
     is_authenticated, user_name, _ = await check_authentication(
         request, session_db, "*"
     )
     
+    print(f"🔍 LANDING DEBUG - Authentication result: is_authenticated={is_authenticated}, user_name={user_name}")
+    
+    # Get the host to determine source domain
+    host = request.headers.get('host', '')
+    is_from_www = host.startswith('www.caronboulme.fr')
+    print(f"🔍 LANDING DEBUG - Is from www.caronboulme.fr: {is_from_www}")
+    
     if is_authenticated:
-        redirect_url = "https://thebrain.caronboulme.fr"
-        title = f"Welcome back, {user_name}!"
-        message = f"Hello {user_name}, redirecting you to The Brain..."
+        if is_from_www:
+            # Get user from database to check their allowed scopes
+            session_cookie = request.cookies.get("vk_session")
+            user_id = deserialize_session(session_cookie) if session_cookie else None
+            
+            if user_id:
+                user_result = await session_db.execute(
+                    select(User).where(User.id == user_id, User.is_active == True)
+                )
+                user = user_result.scalar_one_or_none()
+                
+                if user:
+                    user_scopes = []
+                    if user.allowed_scopes == "*":
+                        user_scopes = ["thebrain", "chatterbox", "unmute-talk", "unmute-transcript"]
+                    elif user.allowed_scopes:
+                        user_scopes = [s.strip() for s in user.allowed_scopes.split(',') if s.strip()]
+                    
+                    print(f"🔍 LANDING DEBUG - User scopes: {user_scopes}")
+                    
+                    # Priority order for redirection: thebrain > chatterbox > unmute-talk > unmute-transcript
+                    service_priority = [
+                        ("thebrain", "https://thebrain.caronboulme.fr", "The Brain"),
+                        ("chatterbox", "https://chatterbox.caronboulme.fr", "Chatterbox"),
+                        ("unmute-talk", "https://unmute-talk.caronboulme.fr", "Unmute Talk"),
+                        ("unmute-transcript", "https://unmute-transcript.caronboulme.fr", "Unmute Transcript")
+                    ]
+                    
+                    # Find first authorized service
+                    for service_name, service_url, display_name in service_priority:
+                        if service_name in user_scopes:
+                            redirect_url = service_url
+                            title = f"Welcome back, {user_name}!"
+                            message = f"Hello {user_name}, redirecting you to {display_name}..."
+                            print(f"🔍 LANDING DEBUG - Redirecting to {service_name}: {service_url}")
+                            break
+                    else:
+                        # No authorized services found, redirect to dashboard
+                        redirect_url = "https://auth.caronboulme.fr/auth/dashboard"
+                        title = f"Welcome back, {user_name}!"
+                        message = f"Hello {user_name}, no authorized services found. Redirecting to dashboard..."
+                        print(f"🔍 LANDING DEBUG - No authorized services, redirecting to dashboard")
+                else:
+                    # User not found, redirect to login
+                    redirect_url = "https://auth.caronboulme.fr/auth/login"
+                    title = "Authentication Required"
+                    message = "Please login to access your services..."
+            else:
+                # No valid session, redirect to login
+                redirect_url = "https://auth.caronboulme.fr/auth/login"
+                title = "Authentication Required"
+                message = "Please login to access your services..."
+        else:
+            # From auth.caronboulme.fr or other domains, show landing page without redirect
+            redirect_url = None  # No automatic redirect
+            title = f"Welcome back, {user_name}!"
+            message = f"Hello {user_name}, you are successfully authenticated!"
     else:
         redirect_url = "https://auth.caronboulme.fr/auth/login"
         title = "Authentication Required"
         message = "Please login to access your services..."
     
-    html_content = f"""
-    <!DOCTYPE html>
-    <html lang="fr">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{title}</title>
-        <meta http-equiv="refresh" content="2;url={redirect_url}">
-        <style>
-            body {{
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-                color: #fff;
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                margin: 0;
-            }}
-            .container {{
-                text-align: center;
-                background: rgba(255, 255, 255, 0.1);
-                backdrop-filter: blur(10px);
-                border-radius: 20px;
-                padding: 40px;
-                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-            }}
-            .logo {{
-                font-size: 3em;
-                margin-bottom: 20px;
-            }}
-            .spinner {{
-                border: 3px solid rgba(255, 255, 255, 0.3);
-                border-top: 3px solid #4ecdc4;
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
-                animation: spin 1s linear infinite;
-                margin: 20px auto;
-            }}
-            @keyframes spin {{
-                0% {{ transform: rotate(0deg); }}
-                100% {{ transform: rotate(360deg); }}
-            }}
-            a {{
-                color: #4ecdc4;
-                text-decoration: none;
-                font-weight: 500;
-            }}
-            a:hover {{
-                text-decoration: underline;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="logo">🔍</div>
-            <h1>{title}</h1>
-            <p>{message}</p>
-            <div class="spinner"></div>
-            <p><a href="{redirect_url}">Click here if you are not redirected automatically</a></p>
-        </div>
-        <script>
-            setTimeout(function() {{
-                window.location.href = "{redirect_url}";
-            }}, 2000);
-        </script>
-    </body>
-    </html>
-    """
+    # Generate different HTML based on whether we have a redirect_url
+    if redirect_url:
+        html_content = f"""
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{title}</title>
+            <meta http-equiv="refresh" content="2;url={redirect_url}">
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                    color: #fff;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0;
+                }}
+                .container {{
+                    text-align: center;
+                    background: rgba(255, 255, 255, 0.1);
+                    backdrop-filter: blur(10px);
+                    border-radius: 20px;
+                    padding: 40px;
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                }}
+                .logo {{
+                    font-size: 3em;
+                    margin-bottom: 20px;
+                }}
+                .spinner {{
+                    border: 3px solid rgba(255, 255, 255, 0.3);
+                    border-top: 3px solid #4ecdc4;
+                    border-radius: 50%;
+                    width: 40px;
+                    height: 40px;
+                    animation: spin 1s linear infinite;
+                    margin: 20px auto;
+                }}
+                @keyframes spin {{
+                    0% {{ transform: rotate(0deg); }}
+                    100% {{ transform: rotate(360deg); }}
+                }}
+                a {{
+                    color: #4ecdc4;
+                    text-decoration: none;
+                    font-weight: 500;
+                }}
+                a:hover {{
+                    text-decoration: underline;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="logo">🔍</div>
+                <h1>{title}</h1>
+                <p>{message}</p>
+                <div class="spinner"></div>
+                <p><a href="{redirect_url}">Click here if you are not redirected automatically</a></p>
+            </div>
+            <script>
+                setTimeout(function() {{
+                    window.location.href = "{redirect_url}";
+                }}, 2000);
+            </script>
+        </body>
+        </html>
+        """
+    else:
+        # No redirect - show static landing page
+        html_content = f"""
+        <!DOCTYPE html>
+        <html lang="fr">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{title}</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                    color: #fff;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin: 0;
+                }}
+                .container {{
+                    text-align: center;
+                    background: rgba(255, 255, 255, 0.1);
+                    backdrop-filter: blur(10px);
+                    border-radius: 20px;
+                    padding: 40px;
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    max-width: 500px;
+                }}
+                .logo {{
+                    font-size: 3em;
+                    margin-bottom: 20px;
+                }}
+                .services {{
+                    margin-top: 30px;
+                }}
+                .service-link {{
+                    display: inline-block;
+                    background: rgba(78, 205, 196, 0.2);
+                    color: #4ecdc4;
+                    padding: 10px 20px;
+                    margin: 10px;
+                    border-radius: 10px;
+                    text-decoration: none;
+                    font-weight: 500;
+                    border: 1px solid rgba(78, 205, 196, 0.3);
+                    transition: all 0.3s ease;
+                }}
+                .service-link:hover {{
+                    background: rgba(78, 205, 196, 0.3);
+                    transform: translateY(-2px);
+                }}
+                .dashboard-link {{
+                    background: rgba(255, 255, 255, 0.2);
+                    color: #fff;
+                    margin-top: 20px;
+                }}
+                .dashboard-link:hover {{
+                    background: rgba(255, 255, 255, 0.3);
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="logo">🔍</div>
+                <h1>{title}</h1>
+                <p>{message}</p>
+                
+                <div class="services">
+                    <h3>Available Services</h3>
+                    <a href="https://thebrain.caronboulme.fr" class="service-link">🧠 The Brain</a>
+                    <a href="https://unmute-talk.caronboulme.fr" class="service-link">🎤 Unmute Talk</a>
+                    <a href="https://chatterbox.caronboulme.fr" class="service-link">💬 Chatterbox</a>
+                    <a href="https://photos.caronboulme.fr" class="service-link">📸 Photos</a>
+                    
+                    <br>
+                    <a href="/auth/dashboard" class="service-link dashboard-link">⚙️ Account Dashboard</a>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
     
     return HTMLResponse(content=html_content, status_code=200)
 
