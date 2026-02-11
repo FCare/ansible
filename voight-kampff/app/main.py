@@ -928,7 +928,6 @@ async def verify_api_key(
     """
     Enhanced verify endpoint for Traefik ForwardAuth
     Supports both API keys and session cookies
-    Auto-detects admin-only services (traefik)
     """
     
     # Extract service name from forwarded host
@@ -958,7 +957,7 @@ async def verify_api_key(
         if not user or not user.is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admin access required for Traefik dashboard"
+                detail="Admin access required"
             )
     
     # Return success with custom headers
@@ -968,8 +967,7 @@ async def verify_api_key(
         headers={
             "X-VK-User": user_name,
             "X-VK-Service": service,
-            "X-VK-Scopes": db_key.scopes if db_key else "*",
-            "X-VK-Admin": "true" if service == "traefik" else "false"
+            "X-VK-Scopes": db_key.scopes
         }
     )
 
