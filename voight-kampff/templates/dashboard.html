@@ -497,13 +497,6 @@
                                                     <span>STT</span>
                                                 </label>
                                                 
-                                                <label class="service-label" data-service="immich">
-                                                    <input type="checkbox" name="service" value="immich"
-                                                           {% if "immich" in user_scopes %}checked{% endif %}
-                                                           onchange="submitScopeForm('{{ admin_user.id }}')">
-                                                    <span>Immich</span>
-                                                </label>
-                                                
                                                 <label class="service-label" data-service="analytics">
                                                     <input type="checkbox" name="service" value="analytics"
                                                            {% if "analytics" in user_scopes %}checked{% endif %}

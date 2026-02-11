@@ -988,7 +988,18 @@ async def verify_api_key(
     if x_forwarded_host:
         service = x_forwarded_host.split('.')[0]
     
-    # Check authentication using common function
+    # Special case: Allow unrestricted access to photos/immich (has its own auth)
+    if service == "photos":
+        return JSONResponse(
+            status_code=200,
+            content={"valid": True, "user": "immich-bypass", "service": service},
+            headers={
+                "X-VK-User": "immich-bypass",
+                "X-VK-Service": service
+            }
+        )
+    
+    # Check authentication using common function for other services
     is_authenticated, user_name, db_key = await check_authentication(
         request, session_db, service, authorization, x_api_key
     )
