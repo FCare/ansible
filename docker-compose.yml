@@ -22,8 +22,8 @@ services:
       - TZ=Europe/Paris
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./traefik/traefik.yml:/traefik.yml:ro
-      - ./traefik/dynamic.yml:/dynamic.yml:ro
+      - ./traefik.yml:/traefik.yml:ro
+      - ./dynamic.yml:/dynamic.yml:ro
       - ./traefik/acme.json:/acme.json
       - ./traefik/logs:/logs
     labels:
@@ -33,23 +33,4 @@ services:
       - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik.service=api@internal"
       - "traefik.http.routers.traefik.middlewares=auth-api@file"
-
-  # Voight-Kampff - API Key Authentication Service
-  voight-kampff:
-    build: ./voight-kampff
-    container_name: ansible-voight-kampff
-    restart: unless-stopped
-    networks:
-      - ansible
-    environment:
-      - TZ=Europe/Paris
-      - VK_DB_PATH=${VK_DB_PATH:-/data/voight-kampff.db}
-      - VK_SECRET_KEY=${VK_SECRET_KEY}
-      - VK_SESSION_EXPIRE_HOURS=${VK_SESSION_EXPIRE_HOURS:-24}
-      - VK_ADMIN_USERNAME=${VK_ADMIN_USERNAME}
-      - VK_ADMIN_PASSWORD=${VK_ADMIN_PASSWORD}
-      - VK_ADMIN_EMAIL=${VK_ADMIN_EMAIL}
-    volumes:
-      - ./voight-kampff/data:/data
-      - ./voight-kampff/config:/config
 

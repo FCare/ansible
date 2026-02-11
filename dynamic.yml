@@ -4,7 +4,7 @@ http:
     # Auto-detects admin requirements (traefik service)
     vk-hybrid:
       forwardAuth:
-        address: "http://ansible-voight-kampff:8080/verify"
+        address: "http://voight-kampff:8080/verify"
         trustForwardHeader: true
         authRequestHeaders:
           - Authorization
@@ -122,13 +122,13 @@ http:
     auth-service:
       loadBalancer:
         servers:
-          - url: "http://ansible-voight-kampff:8080"
+          - url: "http://voight-kampff:8080"
 
     # Landing Service - Conditional Redirect Page
     landing-service:
       loadBalancer:
         servers:
-          - url: "http://ansible-voight-kampff:8080"
+          - url: "http://voight-kampff:8080"
 
     # vLLM FastAPI Service
     vllm-service:
