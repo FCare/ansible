@@ -134,7 +134,7 @@ http:
     vllm-service:
       loadBalancer:
         servers:
-          - url: "http://qwen-api-server:8000"
+          - url: "http://thebrain:8000"
 
     # Unmute Services
     tts-service:
