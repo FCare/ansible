@@ -61,7 +61,7 @@ http:
         customRequestHeaders:
           X-Debug-Route: "joshua-websocket"
         customResponseHeaders:
-          X-Debug-Backend: "joshua-backend:8769"
+          X-Debug-Backend: "joshua-backend:8768"
 
   routers:
     # Auth Service - Web Interface
