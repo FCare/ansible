@@ -48,20 +48,6 @@ http:
         regex: "^https://(www\\.)?caronboulme\\.fr(/.*)?$"
         replacement: "https://assistant.caronboulme.fr${2}"
         permanent: true
-    
-    # Strip /joshua prefix for WebSocket routing
-    joshua-strip-prefix:
-      stripPrefix:
-        prefixes:
-          - "/joshua"
-    
-    # Debug logging pour Joshua WebSocket
-    joshua-debug:
-      headers:
-        customRequestHeaders:
-          X-Debug-Route: "joshua-websocket"
-        customResponseHeaders:
-          X-Debug-Backend: "joshua-backend:8768"
 
   routers:
     # Auth Service - Web Interface
@@ -157,8 +143,6 @@ http:
       tls:
         certResolver: letsencrypt
       service: joshua-backend-service
-      middlewares:
-        - vk-api-only
 
     # Joshua Frontend (No auth - handles auth logic client-side)
     joshua-frontend:
@@ -168,20 +152,6 @@ http:
       tls:
         certResolver: letsencrypt
       service: joshua-frontend-service
-
-    # Joshua WebSocket - No Traefik auth (backend handles auth internally)
-    joshua-websocket:
-      rule: "Host(`assistant.caronboulme.fr`) && PathPrefix(`/joshua`)"
-      priority: 100  # Priority plus élevée que le frontend pour être évaluée en premier
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-      service: joshua-backend-service
-      middlewares:
-        - joshua-debug
-        - joshua-strip-prefix
-      # Note: WebSocket auth handled by backend, prefix stripped for routing
 
     # Photos Service - Immich (no authentication - public access)
     photos:
