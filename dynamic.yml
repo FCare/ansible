@@ -155,7 +155,7 @@ http:
         certResolver: letsencrypt
       service: joshua-frontend-service
 
-    # Joshua WebSocket - Cookie Only (for web frontend)
+    # Joshua WebSocket - No Traefik auth (backend handles auth internally)
     joshua-websocket:
       rule: "Host(`assistant.caronboulme.fr`) && Path(`/joshua`)"
       entryPoints:
@@ -163,8 +163,7 @@ http:
       tls:
         certResolver: letsencrypt
       service: joshua-backend-service
-      middlewares:
-        - vk-cookie-only
+      # Note: No middleware - WebSocket auth handled by backend
 
     # Photos Service - Immich (no authentication - public access)
     photos:
