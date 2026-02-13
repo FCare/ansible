@@ -171,7 +171,8 @@ http:
 
     # Joshua WebSocket - No Traefik auth (backend handles auth internally)
     joshua-websocket:
-      rule: "Host(`assistant.caronboulme.fr`) && Path(`/joshua`)"
+      rule: "Host(`assistant.caronboulme.fr`) && PathPrefix(`/joshua`)"
+      priority: 100  # Priority plus élevée que le frontend pour être évaluée en premier
       entryPoints:
         - websecure
       tls:
