@@ -135,8 +135,8 @@ http:
       middlewares:
         - vk-hybrid
 
-    # Joshua Backend API (Cookie + API Key)
-    joshua-backend:
+    # Joshua Backend API - API Key Only (for programmatic access)
+    joshua-backend-api:
       rule: "Host(`joshua.caronboulme.fr`)"
       entryPoints:
         - websecure
@@ -144,7 +144,7 @@ http:
         certResolver: letsencrypt
       service: joshua-backend-service
       middlewares:
-        - vk-hybrid
+        - vk-api-only
 
     # Joshua Frontend (No auth - handles auth logic client-side)
     joshua-frontend:
@@ -154,6 +154,17 @@ http:
       tls:
         certResolver: letsencrypt
       service: joshua-frontend-service
+
+    # Joshua WebSocket - Cookie Only (for web frontend)
+    joshua-websocket:
+      rule: "Host(`assistant.caronboulme.fr`) && Path(`/joshua`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: joshua-backend-service
+      middlewares:
+        - vk-cookie-only
 
     # Photos Service - Immich (no authentication - public access)
     photos:
