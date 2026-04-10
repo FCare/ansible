@@ -154,7 +154,7 @@ http:
         certResolver: letsencrypt
       service: joshua-backend-service
 
-    # Joshua Frontend (No auth - handles auth logic client-side)
+    # Joshua Frontend - Assistant Service (cookie authentication)
     joshua-frontend:
       rule: "Host(`assistant.caronboulme.fr`)"
       entryPoints:
@@ -162,6 +162,8 @@ http:
       tls:
         certResolver: letsencrypt
       service: joshua-frontend-service
+      middlewares:
+        - vk-cookie-only
 
     # Photos Service - Immich (no authentication - public access)
     photos:
