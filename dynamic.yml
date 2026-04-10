@@ -17,18 +17,6 @@ http:
           - X-VK-Scopes
           - X-VK-Admin
     
-    # Cookie-only authentication (frontend)
-    vk-cookie-only:
-      forwardAuth:
-        address: "http://voight-kampff:8080/verify"
-        trustForwardHeader: true
-        authRequestHeaders:
-          - Cookie
-        authResponseHeaders:
-          - X-VK-User
-          - X-VK-Service
-          - X-VK-Scopes
-    
     # API Key-only authentication (services)
     vk-api-only:
       forwardAuth:
@@ -163,7 +151,7 @@ http:
         certResolver: letsencrypt
       service: joshua-frontend-service
       middlewares:
-        - vk-cookie-only
+        - vk-hybrid
 
     # Photos Service - Immich (no authentication - public access)
     photos:
