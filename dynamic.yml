@@ -171,7 +171,7 @@ http:
         certResolver: letsencrypt
       service: pocket-tts-service
       middlewares:
-        - vk-api-only
+        - vk-hybrid
       priority: 10
 
     # Sesame - Serveur de certificats CA (accès local uniquement)
