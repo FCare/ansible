@@ -37,12 +37,6 @@ http:
         regex: "^https://(www\\.)?caronboulme\\.fr(/.*)?$"
         replacement: "https://assistant.caronboulme.fr${2}"
         permanent: true
-    
-    # Strip /pocket_tts prefix before forwarding to pocket-tts backend
-    strip-pocket-tts:
-      stripPrefix:
-        prefixes:
-          - "/pocket_tts"
 
     # Restriction aux réseaux locaux pour l'endpoint /cert
     local-networks-only:
@@ -170,15 +164,14 @@ http:
 
     # Pocket TTS - French TTS API (hybrid auth: cookie + API key)
     pocket-tts:
-      rule: "Host(`caronboulme.fr`) && PathPrefix(`/pocket_tts`)"
+      rule: "Host(`pocket-tts.caronboulme.fr`)"
       entryPoints:
         - websecure
       tls:
         certResolver: letsencrypt
       service: pocket-tts-service
       middlewares:
-        - vk-hybrid
-        - strip-pocket-tts
+        - vk-api-only
       priority: 10
 
     # Sesame - Serveur de certificats CA (accès local uniquement)
