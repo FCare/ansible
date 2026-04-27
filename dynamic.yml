@@ -38,6 +38,12 @@ http:
         replacement: "https://assistant.caronboulme.fr${2}"
         permanent: true
     
+    # Strip /pocket_tts prefix before forwarding to pocket-tts backend
+    strip-pocket-tts:
+      stripPrefix:
+        prefixes:
+          - "/pocket_tts"
+
     # Restriction aux réseaux locaux pour l'endpoint /cert
     local-networks-only:
       ipAllowList:
@@ -162,6 +168,19 @@ http:
         certResolver: letsencrypt
       service: photos-service
 
+    # Pocket TTS - French TTS API (hybrid auth: cookie + API key)
+    pocket-tts:
+      rule: "Host(`caronboulme.fr`) && PathPrefix(`/pocket_tts`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: pocket-tts-service
+      middlewares:
+        - vk-hybrid
+        - strip-pocket-tts
+      priority: 10
+
     # Sesame - Serveur de certificats CA (accès local uniquement)
     sesame:
       rule: "Host(`caronboulme.fr`) && PathPrefix(`/cert`)"
@@ -260,4 +279,10 @@ http:
       loadBalancer:
         servers:
           - url: "http://alfred-backend:8000"
+
+    # Pocket TTS Service
+    pocket-tts-service:
+      loadBalancer:
+        servers:
+          - url: "http://pocket-tts:8000"
 
