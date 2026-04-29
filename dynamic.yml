@@ -111,6 +111,17 @@ http:
       middlewares:
         - vk-api-only
 
+    # VoxCPM2 TTS Service (hybrid auth: cookie + API key)
+    voxcpm2:
+      rule: "Host(`voxcpm2.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: voxcpm2-service
+      middlewares:
+        - vk-hybrid
+
     # Chatterbox TTS Service (API key only)
     chatterbox:
       rule: "Host(`chatterbox.caronboulme.fr`)"
@@ -278,4 +289,10 @@ http:
       loadBalancer:
         servers:
           - url: "http://pocket-tts:8000"
+
+    # VoxCPM2 TTS Service
+    voxcpm2-service:
+      loadBalancer:
+        servers:
+          - url: "http://voxcpm2-api:8000"
 
