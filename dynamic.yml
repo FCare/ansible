@@ -89,6 +89,17 @@ http:
       middlewares:
         - vk-api-only
 
+        # vLLM FastAPI - The Brain (API key only)
+    thebrain-think:
+      rule: "Host(`thebrain-think.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: vllm-think-service
+      middlewares:
+        - vk-api-only
+
     # TTS Service - Unmute Talk (API key only)
     unmute-talk:
       rule: "Host(`unmute-talk.caronboulme.fr`)"
@@ -231,6 +242,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://thebrain:8000"
+
+    vllm-think-service:
+      loadBalancer:
+        servers:
+          - url: "http://thebrain:9000"
 
     # Unmute Services
     tts-service:
