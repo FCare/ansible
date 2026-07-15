@@ -122,6 +122,17 @@ http:
       middlewares:
         - vk-api-only
 
+    # VSCode Server - code-server (IDE distant, hybrid auth: cookie + API key)
+    code:
+      rule: "Host(`code.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: code-service
+      middlewares:
+        - vk-hybrid
+
     # VoxCPM2 TTS Service (hybrid auth: cookie + API key)
     voxcpm2:
       rule: "Host(`voxcpm2.caronboulme.fr`)"
@@ -311,4 +322,10 @@ http:
       loadBalancer:
         servers:
           - url: "http://voxcpm2-api:8000"
+
+    # VSCode Server - code-server
+    code-service:
+      loadBalancer:
+        servers:
+          - url: "http://code-server:8080"
 
