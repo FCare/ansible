@@ -186,6 +186,27 @@ http:
       middlewares:
         - vk-hybrid
 
+    # Panoramix Backend - joshua persona sur le cascading panoramix (auth VK
+    # gérée par le backend lui-même via le cookie vk_session, comme joshua-backend-api)
+    panoramix-backend-api:
+      rule: "Host(`panoramix.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: panoramix-backend-service
+
+    # Panoramix Frontend - chat.caronboulme.fr (cookie authentication)
+    panoramix-frontend:
+      rule: "Host(`chat.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: panoramix-frontend-service
+      middlewares:
+        - vk-hybrid
+
     # Photos Service - Immich (no authentication - public access)
     photos:
       rule: "Host(`photos.caronboulme.fr`)"
@@ -241,6 +262,28 @@ http:
         - vk-hybrid
       priority: 100
 
+    # Immich Book - Photo book generator (hybrid auth: cookie + API key)
+    photobook:
+      rule: "Host(`photobook.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: photobook-service
+      middlewares:
+        - vk-hybrid
+
+    # Contes - Wiki des contes audio (hybrid auth: cookie + API key)
+    contes:
+      rule: "Host(`contes.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: contes-service
+      middlewares:
+        - vk-hybrid
+
   services:
     # Auth Service - Voight-Kampff Web Interface
     auth-service:
@@ -288,6 +331,18 @@ http:
         servers:
           - url: "http://joshua-frontend:80"
 
+    # Panoramix Backend Service
+    panoramix-backend-service:
+      loadBalancer:
+        servers:
+          - url: "http://panoramix-backend:12345"
+
+    # Panoramix Frontend Service
+    panoramix-frontend-service:
+      loadBalancer:
+        servers:
+          - url: "http://panoramix-frontend:80"
+
     # Photos Service - Immich Server
     photos-service:
       loadBalancer:
@@ -328,4 +383,17 @@ http:
       loadBalancer:
         servers:
           - url: "http://code-server:8080"
+
+    # Immich Book Service
+    photobook-service:
+      loadBalancer:
+        servers:
+          - url: "http://immich-book-frontend:80"
+
+    # Contes Service - wiki + API de recherche sémantique (même conteneur que
+    # l'agent MQTT, voir contes-agent/main.py)
+    contes-service:
+      loadBalancer:
+        servers:
+          - url: "http://contes-agent:8000"
 
