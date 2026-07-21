@@ -284,6 +284,17 @@ http:
       middlewares:
         - vk-hybrid
 
+    # News - Wiki des sujets d'actualité consolidés (hybrid auth: cookie + API key)
+    news:
+      rule: "Host(`news.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: news-service
+      middlewares:
+        - vk-hybrid
+
   services:
     # Auth Service - Voight-Kampff Web Interface
     auth-service:
@@ -396,4 +407,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://contes-agent:8000"
+
+    # News Service - wiki des sujets consolidés + API de recherche sémantique
+    # (même conteneur que le pipeline bulletin, voir agent-news/main.py)
+    news-service:
+      loadBalancer:
+        servers:
+          - url: "http://agent-news:8080"
 
