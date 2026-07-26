@@ -207,6 +207,15 @@ http:
       middlewares:
         - vk-hybrid
 
+    # Authentik - Fournisseur OIDC (dédié à Immich pour l'instant, delegue à Google)
+    sso:
+      rule: "Host(`sso.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: authentik-service
+
     # Photos Service - Immich (no authentication - public access)
     photos:
       rule: "Host(`photos.caronboulme.fr`)"
@@ -376,6 +385,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://panoramix-frontend:80"
+
+    # Authentik Service - OIDC Provider
+    authentik-service:
+      loadBalancer:
+        servers:
+          - url: "http://authentik_server:9000"
 
     # Photos Service - Immich Server
     photos-service:
