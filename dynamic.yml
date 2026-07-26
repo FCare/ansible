@@ -295,6 +295,29 @@ http:
       middlewares:
         - vk-hybrid
 
+    # Familytree Frontend - Arbre familial / relations Immich (hybrid authentication)
+    familytree-frontend:
+      rule: "Host(`people.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: familytree-frontend-service
+      middlewares:
+        - vk-hybrid
+
+    # Familytree Backend API - Direct API access
+    familytree-backend:
+      rule: "Host(`people.caronboulme.fr`) && PathPrefix(`/api/`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: familytree-backend-service
+      middlewares:
+        - vk-hybrid
+      priority: 100
+
   services:
     # Auth Service - Voight-Kampff Web Interface
     auth-service:
@@ -414,4 +437,16 @@ http:
       loadBalancer:
         servers:
           - url: "http://agent-news:8080"
+
+    # Familytree Frontend Service
+    familytree-frontend-service:
+      loadBalancer:
+        servers:
+          - url: "http://familytree-frontend:80"
+
+    # Familytree Backend Service
+    familytree-backend-service:
+      loadBalancer:
+        servers:
+          - url: "http://familytree-backend:8000"
 
