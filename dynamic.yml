@@ -184,7 +184,19 @@ http:
       middlewares:
         - vk-hybrid
 
-    # Joshua Backend API - API Key Only (for programmatic access)
+    # Joshua HTTP API - OAuth endpoints (priorité haute)
+    joshua-http-api:
+      rule: "Host(`joshua.caronboulme.fr`) && PathPrefix(`/get-oauth-token`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: joshua-http-service
+      middlewares:
+        - authentik-sso
+      priority: 100
+
+    # Joshua Backend API - WebSocket (Authentik SSO)
     joshua-backend-api:
       rule: "Host(`joshua.caronboulme.fr`)"
       entryPoints:
@@ -192,8 +204,10 @@ http:
       tls:
         certResolver: letsencrypt
       service: joshua-backend-service
+      middlewares:
+        - authentik-sso
 
-    # Joshua Frontend - Assistant Service (cookie authentication)
+    # Joshua Frontend - Assistant Service (Authentik SSO)
     joshua-frontend:
       rule: "Host(`assistant.caronboulme.fr`)"
       entryPoints:
@@ -202,7 +216,7 @@ http:
         certResolver: letsencrypt
       service: joshua-frontend-service
       middlewares:
-        - vk-hybrid
+        - authentik-sso
 
     # Panoramix Backend - joshua persona sur le cascading panoramix (auth VK
     # gérée par le backend lui-même via le cookie vk_session, comme joshua-backend-api)
@@ -332,7 +346,17 @@ http:
       middlewares:
         - vk-hybrid
 
-    # Familytree Frontend - Arbre familial / relations Immich (hybrid authentication)
+    # Familytree - Logged out page (no auth)
+    familytree-logged-out:
+      rule: "Host(`people.caronboulme.fr`) && PathPrefix(`/logged-out`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: familytree-frontend-service
+      priority: 100
+
+    # Familytree Frontend - Arbre familial / relations Immich (Authentik SSO)
     familytree-frontend:
       rule: "Host(`people.caronboulme.fr`)"
       entryPoints:
@@ -341,7 +365,7 @@ http:
         certResolver: letsencrypt
       service: familytree-frontend-service
       middlewares:
-        - vk-hybrid
+        - authentik-sso
 
     # Familytree Backend API - Direct API access
     familytree-backend:
@@ -352,7 +376,7 @@ http:
         certResolver: letsencrypt
       service: familytree-backend-service
       middlewares:
-        - vk-hybrid
+        - authentik-sso
       priority: 100
 
   services:
@@ -390,7 +414,13 @@ http:
         servers:
           - url: "http://chatterbox-tts-api-blackwell:4123"
 
-    # Joshua Backend Service
+    # Joshua HTTP API Service (OAuth endpoints)
+    joshua-http-service:
+      loadBalancer:
+        servers:
+          - url: "http://joshua-backend:8770"
+
+    # Joshua Backend Service (WebSocket)
     joshua-backend-service:
       loadBalancer:
         servers:
