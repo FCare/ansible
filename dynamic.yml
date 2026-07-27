@@ -45,7 +45,25 @@ http:
           - "192.168.1.0/24"
           - "192.168.2.0/24"
           - "127.0.0.1/32"
-    
+
+    # Authentik ForwardAuth - Authentification SSO réutilisable pour plusieurs services
+    authentik-sso:
+      forwardAuth:
+        address: "http://authentik_server:9000/outpost.goauthentik.io/auth/traefik"
+        trustForwardHeader: true
+        authResponseHeaders:
+          - X-Authentik-Username
+          - X-Authentik-Groups
+          - X-Authentik-Email
+          - X-Authentik-Name
+          - X-Authentik-Uid
+          - X-Authentik-Jwt
+          - X-Authentik-Meta-Jwks
+          - X-Authentik-Meta-Outpost
+          - X-Authentik-Meta-Provider
+          - X-Authentik-Meta-App
+          - X-Authentik-Meta-Version
+
 
   routers:
     # Auth Service - Web Interface
@@ -271,7 +289,7 @@ http:
         - vk-hybrid
       priority: 100
 
-    # Immich Book - Photo book generator (hybrid auth: cookie + API key)
+    # Immich Book - Photo book generator (Authentik SSO)
     photobook:
       rule: "Host(`photobook.caronboulme.fr`)"
       entryPoints:
@@ -280,7 +298,7 @@ http:
         certResolver: letsencrypt
       service: photobook-service
       middlewares:
-        - vk-hybrid
+        - authentik-sso
 
     # Contes - Wiki des contes audio (hybrid auth: cookie + API key)
     contes:
