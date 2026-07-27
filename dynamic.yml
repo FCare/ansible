@@ -289,6 +289,16 @@ http:
         - vk-hybrid
       priority: 100
 
+    # Immich Book - Logged out page (no auth)
+    photobook-logged-out:
+      rule: "Host(`photobook.caronboulme.fr`) && PathPrefix(`/logged-out`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: photobook-service
+      priority: 100
+
     # Immich Book - Photo book generator (Authentik SSO)
     photobook:
       rule: "Host(`photobook.caronboulme.fr`)"
