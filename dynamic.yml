@@ -218,8 +218,9 @@ http:
       middlewares:
         - authentik-sso
 
-    # Panoramix Backend - joshua persona sur le cascading panoramix (auth VK
-    # gérée par le backend lui-même via le cookie vk_session, comme joshua-backend-api)
+    # Panoramix Backend - Authentik SSO (migré depuis VK, même pattern que
+    # joshua-backend-api) - handle_client lit X-Authentik-Username injecté par
+    # Traefik au lieu du cookie vk_session
     panoramix-backend-api:
       rule: "Host(`panoramix.caronboulme.fr`)"
       entryPoints:
@@ -227,8 +228,22 @@ http:
       tls:
         certResolver: letsencrypt
       service: panoramix-backend-service
+      middlewares:
+        - authentik-sso
 
-    # Panoramix Frontend - chat.caronboulme.fr (cookie authentication)
+    # Panoramix Frontend - page de déconnexion publique (pas de authentik-sso —
+    # sinon le retour de post_logout_redirect_uri redéclenche immédiatement une
+    # nouvelle authentification), même pattern que photobook-logged-out
+    panoramix-logged-out:
+      rule: "Host(`chat.caronboulme.fr`) && PathPrefix(`/logged-out`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: panoramix-frontend-service
+      priority: 100
+
+    # Panoramix Frontend - chat.caronboulme.fr (Authentik SSO, migré depuis VK)
     panoramix-frontend:
       rule: "Host(`chat.caronboulme.fr`)"
       entryPoints:
@@ -237,7 +252,7 @@ http:
         certResolver: letsencrypt
       service: panoramix-frontend-service
       middlewares:
-        - vk-hybrid
+        - authentik-sso
 
     # Authentik - Fournisseur OIDC (dédié à Immich pour l'instant, delegue à Google)
     sso:
