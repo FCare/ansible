@@ -30,7 +30,19 @@ http:
           - X-VK-Service
           - X-VK-Scopes
           - X-VK-Admin
-    
+
+    # Authentification service-à-service via JWT Authentik (Bearer), sans
+    # redirection navigateur — remplace vk-api-only pour thebrain/unmute.
+    # Fallback temporaire sur VK/verify le temps que chaque agent appelant
+    # migre vers son propre token Authentik (voir mosquitto-auth-authentik).
+    authentik-bearer:
+      forwardAuth:
+        address: "http://mosquitto-auth-authentik:8080/forwardauth"
+        trustForwardHeader: true
+        authRequestHeaders:
+          - Authorization
+          - X-API-Key
+
     # Redirect www and root domain to assistant
     redirect-to-assistant:
       redirectRegex:
@@ -105,7 +117,7 @@ http:
         certResolver: letsencrypt
       service: vllm-service
       middlewares:
-        - vk-api-only
+        - authentik-bearer
 
         # vLLM FastAPI - The Brain (API key only)
     thebrain-think:
@@ -116,7 +128,7 @@ http:
         certResolver: letsencrypt
       service: vllm-think-service
       middlewares:
-        - vk-api-only
+        - authentik-bearer
 
     # TTS Service - Unmute Talk (API key only)
     unmute-talk:
@@ -127,7 +139,7 @@ http:
         certResolver: letsencrypt
       service: tts-service
       middlewares:
-        - vk-api-only
+        - authentik-bearer
 
     # STT Service - Unmute Transcript (API key only)
     unmute-transcript:
@@ -138,7 +150,7 @@ http:
         certResolver: letsencrypt
       service: stt-service
       middlewares:
-        - vk-api-only
+        - authentik-bearer
 
     # VSCode Server - code-server (Authentik SSO, migré depuis VK — aucun
     # appelant service-à-service trouvé pour cet host, contrairement à voxcpm2)
