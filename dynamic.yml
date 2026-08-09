@@ -164,7 +164,8 @@ http:
       middlewares:
         - authentik-sso
 
-    # VoxCPM2 TTS Service (hybrid auth: cookie + API key)
+    # VoxCPM2 TTS Service (Authentik SSO, migré depuis VK — panoramix l'appelle
+    # en interne via Docker DNS, joshua était le seul appelant public, arrêté)
     voxcpm2:
       rule: "Host(`voxcpm2.caronboulme.fr`)"
       entryPoints:
@@ -173,9 +174,11 @@ http:
         certResolver: letsencrypt
       service: voxcpm2-service
       middlewares:
-        - vk-hybrid
+        - authentik-sso
 
-    # Traefik Dashboard - Admin only (hybrid auth for admin detection)
+    # Traefik Dashboard - Authentik SSO, migré depuis VK — restreint au groupe
+    # "authentik Admins" côté Authentik (Policy Binding), pas ouvert à tous les
+    # utilisateurs contrairement aux autres routes migrées
     traefik-dashboard:
       rule: "Host(`traefik.caronboulme.fr`)"
       entryPoints:
@@ -184,7 +187,7 @@ http:
         certResolver: letsencrypt
       service: api@internal
       middlewares:
-        - vk-hybrid
+        - authentik-sso
 
     # Panoramix Backend - Authentik SSO (migré depuis VK, même pattern que
     # joshua-backend-api) - handle_client lit X-Authentik-Username injecté par
