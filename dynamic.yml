@@ -135,6 +135,19 @@ http:
       middlewares:
         - authentik-sso
 
+    # MusicGen - interface Gradio hébergée sur la machine locale nestor (hors
+    # Docker) — Authentik SSO, même pattern que voxcpm2 : accès navigateur
+    # uniquement, aucun appelant service-à-service
+    musicgen:
+      rule: "Host(`musicgen.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: musicgen-service
+      middlewares:
+        - authentik-sso
+
     # Traefik Dashboard - Authentik SSO, migré depuis VK — restreint au groupe
     # "authentik Admins" côté Authentik (Policy Binding), pas ouvert à tous les
     # utilisateurs contrairement aux autres routes migrées
@@ -404,6 +417,13 @@ http:
       loadBalancer:
         servers:
           - url: "http://voxcpm2-api:8000"
+
+    # MusicGen Service - Gradio sur la machine nestor (192.168.1.224), résolu
+    # par le DNS de l'hôte comme johnny pour Seafile
+    musicgen-service:
+      loadBalancer:
+        servers:
+          - url: "http://nestor:7860"
 
     # VSCode Server - code-server
     code-service:
