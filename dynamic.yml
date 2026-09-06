@@ -1,40 +1,8 @@
 http:
   middlewares:
-    # Hybrid Authentication middleware (API Key + Cookie)
-    # Auto-detects admin requirements (traefik service)
-    vk-hybrid:
-      forwardAuth:
-        address: "http://voight-kampff:8080/verify"
-        trustForwardHeader: true
-        authRequestHeaders:
-          - Authorization
-          - X-API-Key
-          - Cookie
-          - Accept
-        authResponseHeaders:
-          - X-VK-User
-          - X-VK-Service
-          - X-VK-Scopes
-          - X-VK-Admin
-    
-    # API Key-only authentication (services)
-    vk-api-only:
-      forwardAuth:
-        address: "http://voight-kampff:8080/verify"
-        trustForwardHeader: true
-        authRequestHeaders:
-          - Authorization
-          - X-API-Key
-        authResponseHeaders:
-          - X-VK-User
-          - X-VK-Service
-          - X-VK-Scopes
-          - X-VK-Admin
-
     # Authentification service-à-service via JWT Authentik (Bearer), sans
-    # redirection navigateur — remplace vk-api-only pour thebrain/unmute.
-    # Fallback temporaire sur VK/verify le temps que chaque agent appelant
-    # migre vers son propre token Authentik (voir mosquitto-auth-authentik).
+    # redirection navigateur — utilisé pour thebrain/unmute (voir
+    # mosquitto-auth-authentik/main.py::forwardauth).
     authentik-bearer:
       forwardAuth:
         address: "http://mosquitto-auth-authentik:8080/forwardauth"
@@ -78,15 +46,6 @@ http:
 
 
   routers:
-    # Auth Service - Web Interface
-    auth:
-      rule: "Host(`auth.caronboulme.fr`)"
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-      service: auth-service
-
     # Redirect root and www domains to assistant
     root-redirect:
       rule: "Host(`caronboulme.fr`)"
@@ -243,6 +202,15 @@ http:
         certResolver: letsencrypt
       service: photos-service
 
+    # Cloud Service - Seafile (gère sa propre authentification OIDC via Authentik)
+    cloud:
+      rule: "Host(`cloud.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: seafile-service
+
     # Sesame - Serveur de certificats CA (accès local uniquement)
     sesame:
       rule: "Host(`caronboulme.fr`) && PathPrefix(`/cert`)"
@@ -361,12 +329,6 @@ http:
       priority: 100
 
   services:
-    # Auth Service - Voight-Kampff Web Interface
-    auth-service:
-      loadBalancer:
-        servers:
-          - url: "http://voight-kampff:8080"
-
     # vLLM FastAPI Service
     vllm-service:
       loadBalancer:
@@ -412,6 +374,13 @@ http:
       loadBalancer:
         servers:
           - url: "http://immich_server:2283"
+
+    # Seafile Service - Cloud Storage (VM johnny)
+    seafile-service:
+      loadBalancer:
+        servers:
+          - url: "http://johnny:8000"
+
     # Sesame Service - Serveur de certificats CA
     sesame-service:
       loadBalancer:
