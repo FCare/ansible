@@ -296,6 +296,21 @@ http:
       middlewares:
         - authentik-sso
 
+    # Maestro - Wiki de la discothèque (Authentik SSO). Le provider
+    # "Forward Auth maestro" est rattaché à l'outpost embarqué, comme celui de
+    # contes : sans ce rattachement le middleware refuserait la requête.
+    # La recherche du wiki est servie par l'agent (/search, /similar) et non par
+    # MkDocs, dont l'index pèserait ~147 Mo à l'échelle du catalogue.
+    maestro:
+      rule: "Host(`maestro.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: maestro-service
+      middlewares:
+        - authentik-sso
+
     # News - Wiki des sujets d'actualité consolidés (Authentik SSO, migré depuis
     # VK — même remarque que contes ci-dessus)
     news:
@@ -418,12 +433,14 @@ http:
         servers:
           - url: "http://voxcpm2-api:8000"
 
-    # MusicGen Service - Gradio sur la machine nestor (192.168.1.224), résolu
-    # par le DNS de l'hôte comme johnny pour Seafile
+    # MusicGen Service - conteneur "musicgen" (ace-step-ui) sur le réseau
+    # ansible, qui appelle lui-même l'API REST d'ACE-Step sur nestor
+    # (192.168.1.224:8001) — remplace l'ancien accès direct au Gradio de
+    # nestor, désormais désactivé au profit du mode API.
     musicgen-service:
       loadBalancer:
         servers:
-          - url: "http://nestor:7860"
+          - url: "http://musicgen:3000"
 
     # VSCode Server - code-server
     code-service:
@@ -443,6 +460,13 @@ http:
       loadBalancer:
         servers:
           - url: "http://contes-agent:8000"
+
+    # Maestro Service - wiki statique + API de recherche et de similarité
+    # sonore (même conteneur que l'agent MQTT, voir maestro/main.py)
+    maestro-service:
+      loadBalancer:
+        servers:
+          - url: "http://maestro:8000"
 
     # News Service - wiki des sujets consolidés + API de recherche sémantique
     # (même conteneur que le pipeline bulletin, voir agent-news/main.py)
