@@ -184,10 +184,23 @@ http:
         - sablier-acestep
         - allow-frame-nextcloud
 
-    # Z-Anime - ComfyUI (fine-tune anime de Z-Image) sur nestor:8188 (GPU1).
-    # Authentik SSO puis Sablier : le conteneur ne tourne que pendant l'usage.
+    # Z-Anime - interface web (nestor:8189) : prompt en français -> Gemma -> ComfyUI,
+    # galerie partagée. Authentik SSO ; pas de Sablier ici : l'UI est toujours allumée
+    # et réveille elle-même ComfyUI (groupe Sablier "zanime") à chaque génération.
     zanime:
       rule: "Host(`zanime.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: zanime-ui-service
+      middlewares:
+        - authentik-sso
+
+    # ComfyUI brut (nestor:8188, GPU1) - Authentik SSO puis Sablier : le conteneur ne
+    # tourne que pendant l'usage. Sous-domaine dédié : ComfyUI ne supporte pas un sous-chemin.
+    comfyui:
+      rule: "Host(`comfyui.caronboulme.fr`)"
       entryPoints:
         - websecure
       tls:
@@ -508,6 +521,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://192.168.1.224:8096"
+
+    # Z-Anime - interface web (nestor)
+    zanime-ui-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:8189"
 
     # Z-Anime (nestor) - ComfyUI
     zanime-service:
