@@ -11,6 +11,39 @@ http:
           - Authorization
           - X-API-Key
 
+    # Autorise l'affichage en iframe depuis Nextcloud uniquement (remplace le
+    # X-Frame-Options SAMEORIGIN envoye par le nginx du service)
+    allow-frame-nextcloud:
+      headers:
+        customResponseHeaders:
+          X-Frame-Options: ""
+        contentSecurityPolicy: "frame-ancestors 'self' https://cloud.caronboulme.fr"
+
+    # Sablier (serveur sur nestor:10000) : reveille le conteneur a la premiere
+    # requete, l'endort apres sessionDuration sans visite. A placer APRES
+    # authentik-sso pour que seuls les utilisateurs authentifies reveillent.
+    sablier-acestep:
+      plugin:
+        sablier:
+          sablierUrl: "http://192.168.1.224:10000"
+          group: acestep
+          sessionDuration: 30m
+          dynamic:
+            displayName: "ACE-Step"
+            theme: ghost
+            refreshFrequency: 5s
+
+    sablier-zanime:
+      plugin:
+        sablier:
+          sablierUrl: "http://192.168.1.224:10000"
+          group: zanime
+          sessionDuration: 20m
+          dynamic:
+            displayName: "Z-Anime"
+            theme: ghost
+            refreshFrequency: 5s
+
     # Redirect www and root domain to assistant
     redirect-to-assistant:
       redirectRegex:
@@ -134,6 +167,7 @@ http:
       service: voxcpm2-service
       middlewares:
         - authentik-sso
+        - allow-frame-nextcloud
 
     # MusicGen - interface Gradio hébergée sur la machine locale nestor (hors
     # Docker) — Authentik SSO, même pattern que voxcpm2 : accès navigateur
@@ -147,6 +181,21 @@ http:
       service: musicgen-service
       middlewares:
         - authentik-sso
+        - sablier-acestep
+        - allow-frame-nextcloud
+
+    # Z-Anime - ComfyUI (fine-tune anime de Z-Image) sur nestor:8188 (GPU1).
+    # Authentik SSO puis Sablier : le conteneur ne tourne que pendant l'usage.
+    zanime:
+      rule: "Host(`zanime.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: zanime-service
+      middlewares:
+        - authentik-sso
+        - sablier-zanime
 
     # Traefik Dashboard - Authentik SSO, migré depuis VK — restreint au groupe
     # "authentik Admins" côté Authentik (Policy Binding), pas ouvert à tous les
@@ -196,6 +245,7 @@ http:
       service: panoramix-frontend-service
       middlewares:
         - authentik-sso
+        - allow-frame-nextcloud
 
     # Authentik - Fournisseur OIDC (dédié à Immich pour l'instant, delegue à Google)
     sso:
@@ -215,14 +265,75 @@ http:
         certResolver: letsencrypt
       service: photos-service
 
-    # Cloud Service - Seafile (gère sa propre authentification OIDC via Authentik)
+    # Cloud Service - Nextcloud (gère sa propre authentification OIDC via Authentik)
     cloud:
       rule: "Host(`cloud.caronboulme.fr`)"
       entryPoints:
         - websecure
       tls:
         certResolver: letsencrypt
-      service: seafile-service
+      service: nextcloud-service
+
+    # Collabora Online - editeur bureautique pour Nextcloud (heberge sur nestor).
+    # Pas de forward-auth : Nextcloud et le navigateur le contactent directement
+    # (protocole WOPI), l'acces est restreint cote Collabora par aliasgroup1.
+    office:
+      rule: "Host(`office.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: collabora-service
+
+    # Jellyfin - mediatheque de films (nestor). Derriere Authentik (forward-auth) comme les autres services ;
+    # Jellyfin garde en plus son propre login. Les applications natives (TV, mobiles) ne passent donc plus.
+    films:
+      rule: "Host(`films.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: jellyfin-service
+      middlewares:
+        - authentik-sso
+
+    # Kavita - bibliotheque de livres (nestor). Derriere Authentik (forward-auth) comme les autres services ;
+    # Kavita garde en plus son propre login. Les applications externes (OPDS) ne passent donc plus.
+    livres:
+      rule: "Host(`livres.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: kavita-service
+      middlewares:
+        - authentik-sso
+        - allow-frame-nextcloud
+
+    # Kavita OPDS : point d'entree pour les applications de lecture (KOReader, Moon+ Reader...).
+    # Seuls /api/opds/ et /api/image/ (couvertures) contournent Authentik ; l'acces exige la cle d'API personnelle
+    # de l'utilisateur (dans l'URL pour OPDS, en parametre apiKey pour les images), sinon Kavita repond 401. Priorite superieure a la route "livres".
+    livres-opds:
+      rule: "Host(`livres.caronboulme.fr`) && (PathPrefix(`/api/opds/`) || PathPrefix(`/api/image/`))"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: kavita-service
+      priority: 200
+
+    # Ren'Py (nestor) : portail des jeux exportes pour le web + Studio (SDK Ren'Py dans un bureau web, /studio/).
+    # Derriere Authentik ; la passerelle nginx de nestor n'accepte que cette machine.
+    renpy:
+      rule: "Host(`renpy.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: renpy-service
+      middlewares:
+        - authentik-sso
+        - allow-frame-nextcloud
 
     # Sesame - Serveur de certificats CA (accès local uniquement)
     sesame:
@@ -234,33 +345,6 @@ http:
       service: sesame-service
       middlewares:
         - local-networks-only
-
-    # Alfred Frontend - Liste Service (Authentik SSO, migré depuis VK — note :
-    # l'identité par-utilisateur d'alfred était déjà cassée côté VK avant cette
-    # migration, le backend lisant X-Remote-User/etc jamais réellement injectés ;
-    # cette bascule ne fait que migrer la porte d'entrée, pas ce défaut
-    # préexistant)
-    alfred-frontend:
-      rule: "Host(`liste.caronboulme.fr`)"
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-      service: alfred-frontend-service
-      middlewares:
-        - authentik-sso
-
-    # Alfred Backend API - Direct API access (Authentik SSO, migré depuis VK)
-    alfred-backend:
-      rule: "Host(`liste.caronboulme.fr`) && PathPrefix(`/api/`)"
-      entryPoints:
-        - websecure
-      tls:
-        certResolver: letsencrypt
-      service: alfred-backend-service
-      middlewares:
-        - authentik-sso
-      priority: 100
 
     # Immich Book - Logged out page (no auth)
     photobook-logged-out:
@@ -282,6 +366,7 @@ http:
       service: photobook-service
       middlewares:
         - authentik-sso
+        - allow-frame-nextcloud
 
     # Contes - Wiki des contes audio (Authentik SSO, migré depuis VK — aucun
     # appelant service-à-service trouvé pour l'host public, wiki-agent y accède
@@ -295,6 +380,7 @@ http:
       service: contes-service
       middlewares:
         - authentik-sso
+        - allow-frame-nextcloud
 
     # Maestro - Wiki de la discothèque (Authentik SSO). Le provider
     # "Forward Auth maestro" est rattaché à l'outpost embarqué, comme celui de
@@ -310,6 +396,7 @@ http:
       service: maestro-service
       middlewares:
         - authentik-sso
+        - allow-frame-nextcloud
 
     # News - Wiki des sujets d'actualité consolidés (Authentik SSO, migré depuis
     # VK — même remarque que contes ci-dessus)
@@ -322,6 +409,7 @@ http:
       service: news-service
       middlewares:
         - authentik-sso
+        - allow-frame-nextcloud
 
     # Familytree - Logged out page (no auth)
     familytree-logged-out:
@@ -403,29 +491,47 @@ http:
         servers:
           - url: "http://immich_server:2283"
 
-    # Seafile Service - Cloud Storage (VM johnny)
-    seafile-service:
+    # Nextcloud Service - hébergé sur nestor (192.168.1.224)
+    nextcloud-service:
       loadBalancer:
         servers:
-          - url: "http://johnny:8000"
+          - url: "http://192.168.1.224:8180"
+
+    # Collabora Online (nestor)
+    collabora-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:9980"
+
+    # Jellyfin (nestor)
+    jellyfin-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:8096"
+
+    # Z-Anime (nestor) - ComfyUI
+    zanime-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:8188"
+
+    # Kavita (nestor)
+    kavita-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:5050"
+
+    # Ren'Py (nestor)
+    renpy-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:8480"
 
     # Sesame Service - Serveur de certificats CA
     sesame-service:
       loadBalancer:
         servers:
           - url: "http://sesame:8080"
-
-    # Alfred Frontend Service
-    alfred-frontend-service:
-      loadBalancer:
-        servers:
-          - url: "http://alfred-frontend:80"
-
-    # Alfred Backend Service
-    alfred-backend-service:
-      loadBalancer:
-        servers:
-          - url: "http://alfred-backend:8000"
 
     # VoxCPM2 TTS Service
     voxcpm2-service:

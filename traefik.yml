@@ -18,6 +18,14 @@ entryPoints:
       tls:
         certResolver: letsencrypt
 
+# Plugin Sablier : reveille/endort des conteneurs de nestor (le serveur Sablier
+# tourne sur nestor:10000, voir ~/workspace/Sablier sur nestor).
+experimental:
+  plugins:
+    sablier:
+      moduleName: github.com/sablierapp/sablier-traefik-plugin
+      version: v1.3.0
+
 providers:
   docker:
     endpoint: "unix:///var/run/docker.sock"
