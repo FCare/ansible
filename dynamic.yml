@@ -184,11 +184,11 @@ http:
         - sablier-acestep
         - allow-frame-nextcloud
 
-    # Z-Anime - interface web (nestor:8189) : prompt en français -> Gemma -> ComfyUI,
+    # Images (Z-Anime) - interface web (nestor:8189) : prompt en français -> Gemma -> ComfyUI,
     # galerie partagée. Authentik SSO ; pas de Sablier ici : l'UI est toujours allumée
     # et réveille elle-même ComfyUI (groupe Sablier "zanime") à chaque génération.
-    zanime:
-      rule: "Host(`zanime.caronboulme.fr`)"
+    image:
+      rule: "Host(`image.caronboulme.fr`)"
       entryPoints:
         - websecure
       tls:
