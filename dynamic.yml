@@ -1,5 +1,15 @@
 http:
   middlewares:
+    # Réveil : le client WebSocket d'ESP-IDF met toujours le port dans l'en-tête Host
+    # ("reveil.caronboulme.fr:443"), qu'Authentik ne reconnaît pas (404). Remet l'hôte
+    # sans le port (Host et X-Forwarded-Host, celui que lit Authentik), à placer avant
+    # authentik-sso.
+    reveil-host:
+      headers:
+        customRequestHeaders:
+          Host: "reveil.caronboulme.fr"
+          X-Forwarded-Host: "reveil.caronboulme.fr"
+
     # Authentification service-à-service via JWT Authentik (Bearer), sans
     # redirection navigateur — utilisé pour thebrain/unmute (voir
     # mosquitto-auth-authentik/main.py::forwardauth).
@@ -79,6 +89,32 @@ http:
 
 
   routers:
+    # Réveil - serveur de mises à jour (nginx, ~/workspace/reveil-update) : manifest et
+    # firmwares. Authentik : provider « Forward Auth reveil », compte de service reveil-ota.
+    reveil-update:
+      rule: "Host(`reveil.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: reveil-update-service
+      middlewares:
+        - reveil-host
+        - authentik-sso
+
+    # Réveil - serveur vocal (~/workspace/reveil-assistant) : WebSocket /assistant/stream,
+    # même hôte et même compte Authentik que les mises à jour.
+    reveil-assistant:
+      rule: "Host(`reveil.caronboulme.fr`) && PathPrefix(`/assistant/`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: reveil-assistant-service
+      middlewares:
+        - reveil-host
+        - authentik-sso
+
     # Redirect root and www domains to assistant
     root-redirect:
       rule: "Host(`caronboulme.fr`)"
@@ -287,6 +323,17 @@ http:
         certResolver: letsencrypt
       service: nextcloud-service
 
+    # Git Service - Forgejo (nestor). Pas d'Authentik devant : un forward-auth
+    # casserait git clone/push en HTTPS et l'API/les webhooks. Forgejo gère
+    # ses propres comptes (inscription publique désactivée).
+    git:
+      rule: "Host(`git.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: forgejo-service
+
     # Collabora Online - editeur bureautique pour Nextcloud (heberge sur nestor).
     # Pas de forward-auth : Nextcloud et le navigateur le contactent directement
     # (protocole WOPI), l'acces est restreint cote Collabora par aliasgroup1.
@@ -457,7 +504,59 @@ http:
         - authentik-sso
       priority: 100
 
+    # Podcast-agent - interface web (nestor). Authentik SSO ; favorites-api lit
+    # X-Authentik-Username injecte par Traefik au lieu du header X-VK-User
+    # choisi cote client (meme migration que panoramix-backend-api).
+    podcast:
+      rule: "Host(`podcast.caronboulme.fr`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: podcast-web-service
+      middlewares:
+        - authentik-sso
+
+    # Podcast-agent - API de recommandation/recherche (nestor:8000), deja servie
+    # sous le prefixe /podcast-recommendation cote app. Priorite superieure a
+    # la route "podcast" pour matcher avant le frontend.
+    podcast-recommendation-api:
+      rule: "Host(`podcast.caronboulme.fr`) && PathPrefix(`/podcast-recommendation`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: podcast-recommendation-service
+      middlewares:
+        - authentik-sso
+      priority: 100
+
+    # Podcast-agent - API de favoris (nestor:8090), deja servie sous /favorites
+    # cote app. Priorite superieure a la route "podcast".
+    podcast-favorites-api:
+      rule: "Host(`podcast.caronboulme.fr`) && PathPrefix(`/favorites`)"
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      service: podcast-favorites-service
+      middlewares:
+        - authentik-sso
+      priority: 100
+
   services:
+    # Réveil - serveur de mises à jour
+    reveil-update-service:
+      loadBalancer:
+        servers:
+          - url: "http://reveil-update:80"
+
+    # Réveil - serveur vocal
+    reveil-assistant-service:
+      loadBalancer:
+        servers:
+          - url: "http://reveil-assistant:8080"
+
     # vLLM FastAPI Service
     vllm-service:
       loadBalancer:
@@ -509,6 +608,12 @@ http:
       loadBalancer:
         servers:
           - url: "http://192.168.1.224:8180"
+
+    # Forgejo Service (nestor)
+    forgejo-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:3000"
 
     # Collabora Online (nestor)
     collabora-service:
@@ -611,4 +716,22 @@ http:
       loadBalancer:
         servers:
           - url: "http://familytree-backend:8000"
+
+    # Podcast-agent - interface web (nestor)
+    podcast-web-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:8080"
+
+    # Podcast-agent - API de recommandation/recherche (nestor)
+    podcast-recommendation-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:8000"
+
+    # Podcast-agent - API de favoris (nestor)
+    podcast-favorites-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.224:8090"
 
